@@ -53,12 +53,33 @@ Latest report on top.
 
 - None.
 
+### Verified on the maintainer's machine
+
+Run in a real console (the Terminal panel of the Claude app), with read-only
+commands only:
+
+- **PowerShell 7:** `apply --what-if` on a throwaway repo shows the steps,
+  framed commands and summary as designed.
+- **Colours, read back from the console screen buffer:**
+  - PowerShell 7: step headers Cyan, `>` default, `|` output DarkGray,
+    `< done` Green, `< failed` Red, warnings Yellow, summary lines by
+    result.
+  - Windows PowerShell 5.1 (installer functions): Cyan, Green and Red as
+    designed.
+- **The installer under 5.1:**
+  - a `winget search` through `Invoke-InstallCommand` shows winget's own
+    table, and the function returns exactly the exit code (0, or 128 for a
+    failing git);
+  - a child `pwsh` started the same way as setup sees an interactive
+    console (input not redirected, window width readable), which
+    `Read-Host` needs.
+
 ### To verify
 
-- Colours and winget's progress rendering in Windows Terminal and in the
-  classic console, under PowerShell 7 and Windows PowerShell 5.1.
-- `Start-Process -NoNewWindow` keeps the setup prompts (`Read-Host`)
-  working in the installer.
+- Colours in Windows Terminal and the classic console window (the checks
+  above ran in the app's terminal).
+- An actual prompt answered during setup, and winget's progress bar during a
+  real install, through the one-liner.
 
 ---
 
