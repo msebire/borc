@@ -1,0 +1,24 @@
+# Manual check: a reboot: true recipe runs first and may ask for a restart.
+# Enables Virtual Machine Platform, which needs a restart. Fresh machine only.
+#
+# Layout under BORC_SETTINGS: none.
+borc:
+  description: borc manual check for reboot recipes
+  reboot: true
+$schema: https://raw.githubusercontent.com/PowerShell/DSC/main/schemas/2023/08/config/document.json
+metadata:
+  winget:
+    processor: dscv3
+resources:
+  - name: virtual machine platform
+    type: Microsoft.DSC.Transitional/WindowsPowerShellScript
+    metadata:
+      securityContext: elevated
+    properties:
+      input: VirtualMachinePlatform
+      testScript: |
+        param($feature)
+        (Get-WindowsOptionalFeature -Online -FeatureName $feature).State -eq 'Enabled'
+      setScript: |
+        param($feature)
+        Enable-WindowsOptionalFeature -Online -FeatureName $feature -All -NoRestart | Out-Null

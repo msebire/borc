@@ -4,6 +4,274 @@ Latest report on top.
 
 ---
 
+## Final report (2026-10-24)
+
+### Done
+
+Everything is on the branch `develop`, one commit per step. `main` is
+untouched: it only receives released work.
+
+- **Install:** `install.ps1` hands over to `src/setup.ps1` for the steps
+  that run under PowerShell 7.
+- **The `borc` command:** `src/borc.cmd` and `src/borc.ps1` run the module
+  in `src/Borc/`, which provides every command of the spec. Its help pages
+  are in `src/Borc/help/`.
+- **Generator and validation:** `Generator.ps1` builds the merged
+  configuration; `Config.ps1`, `Recipe.ps1` and `Plan.ps1` check
+  `borc.yaml` and the recipes. All WinGet format rules are in
+  `WingetRules.ps1`; the URL constant is in `Constants.ps1`.
+- **Starter template and logs:** the template is in `src/Borc/template/`.
+  Logs go to `%LOCALAPPDATA%\borc\logs` and the last 20 are kept.
+- **`Get-BorcSecret`:** `src/Borc/Get-BorcSecret.ps1`, tested under
+  PowerShell 7 and Windows PowerShell 5.1.
+- **Tests:** `./build/test.ps1` runs PSScriptAnalyzer (no findings) and 169
+  Pester tests, all passing. They cover:
+  - parsing and validation;
+  - the generator, against golden files;
+  - the text edits of `borc.yaml`;
+  - the profile block;
+  - Git behaviour on temporary repos;
+  - secrets and logs;
+  - every command with winget mocked;
+  - `install.ps1` functions and its parsing under 5.1;
+  - the documentation itself.
+- **Docs:** the README and the seven pages in `docs/`. Every YAML block in
+  them is a file in `docs/examples/`, checked by the tests, and
+  `docs/commands.md` is checked word for word against the help pages.
+- **Rules for later sessions:** `CLAUDE.md` holds the hard rules and the test
+  safety rules.
+- **Changelog:** `CHANGELOG.md` lists this work under `[Unreleased]`; the
+  version number is set when the release is cut.
+- **Branches:** this work is on `develop`, and `main` only receives
+  releases (README, Development section). `BORC_BRANCH=develop` installs the
+  engine from `develop` to try it before a release.
+- **Manual checks:** a test config repo with `@local` recipes for the
+  checks is in `tests/manual/`.
+- **Real environment:** after every full run, nothing existed in
+  `%LOCALAPPDATA%\borc`, neither `BORC_SETTINGS` nor the user `PATH` had
+  changed, and no `borc-test:` credential was left.
+- **Safe checks:** I ran the five checks below in a throwaway folder. All
+  behaved as described.
+
+### Assumptions
+
+The step reports below list them all. The ones with the most effect:
+
+- **Exit codes:** 0 done, 1 failed, 2 usage error, 3010 restart needed.
+- **Plain packages:** `winget:` and `msstore:` apps run first in the main
+  run, as `Microsoft.WinGet/Package` units with `id` and `source`.
+- **Restart detection:** borc compares the CBS and Windows Update registry
+  keys before and after each run.
+- **A config branch with no upstream** is applied from the local copy.
+- **Extra validation:** a duplicate app, a placeholder outside `input`, a
+  `'` in a resource name, a WinGet header that differs from the verified
+  one, and unknown keys are all errors.
+- **`Microsoft.DSC`** is installed as the winget package `Microsoft.DSC`.
+- **Reruns of the installer** reuse a `BORC_SETTINGS` that is already a Git
+  repo, without asking for the URL again.
+
+### Questions
+
+1. **Plain packages and UAC.** Machine-scope installers run from a
+   non-elevated `Microsoft.WinGet/Package` unit may show their own UAC
+   prompts, which would break "a single UAC prompt". Should plain packages
+   get `securityContext: elevated`? That installs per-user apps from an
+   elevated context. **Decision (maintainer, 2026-10-24):** keep them
+   non-elevated for now, and decide after the fresh-machine check (item 3).
+
+### Deviations
+
+- **Release model:** instead of release tags, `main` holds released work only
+  and `develop` everything else. The one-liner fetches `install.ps1` from
+  `main`, the engine is a `main` clone, `self-update` pulls the engine's
+  branch, and the update notice compares with that branch. Tags are for
+  communication only.
+- **Install order:** `install.ps1` clones the engine before the questions,
+  so the remaining steps run from the tested module. All of them still
+  happen before `borc apply`.
+- **`docs/commands.md`** adds a few lines around the help pages (logs, the
+  two runs, exit codes). The pages themselves are word for word.
+
+### To verify
+
+#### Safe to run on the maintainer's machine
+
+**Status (2026-10-24):** the maintainer ran all five checks: OK.
+
+Run these in a separate PowerShell 7 window, from the repo root, and close it
+afterwards. The environment variables are set for that process only, so logs
+and clones stay in `$check`.
+
+```powershell
+$check = "$env:TEMP\borc-check"
+./tests/manual/New-CheckRepo.ps1 -Path $check
+$env:BORC_SETTINGS = "$check\settings"
+$env:LOCALAPPDATA = "$check\localappdata"
+Import-Module ./src/Borc/Borc.psd1
+```
+
+1. **`apply --what-if` changes nothing.** It lists `Git.Git` as installed,
+   the four recipes (the reboot one "runs first"), the skipped
+   `greeting file` unit, and `BORC_CHECK_SECRET` to be asked for. It ends
+   with "Nothing was changed". The status shows nothing and the log shows
+   one commit.
+
+   ```powershell
+   Invoke-Borc -Arguments apply, --what-if
+   git -C $check\settings status --short
+   git -C $check\settings log --oneline
+   ```
+
+2. **A dirty tracked file blocks the pull.** The refusal lists
+   `borc/borc.yaml` and exits with 1 before any winget call. Only run
+   `apply` while the file is dirty.
+
+   ```powershell
+   Add-Content $check\settings\borc\borc.yaml '# local edit'
+   Invoke-Borc -Arguments apply
+   git -C $check\settings checkout -- borc/borc.yaml
+   ```
+
+3. **Unknown parameter and undeclared secret errors.** Both errors are
+   reported together, nothing runs, and the exit code is 1.
+
+   ```powershell
+   Copy-Item $check\bad-parameter.borc.yaml $check\settings\borc\borc.yaml -Force
+   Invoke-Borc -Arguments apply, --what-if
+   git -C $check\settings checkout -- borc/borc.yaml
+   ```
+
+4. **`install` and `uninstall` edit `borc.yaml`.** Removing a recipe deletes
+   only its line. Git is installed, so `install` skips winget and only adds
+   the line back. Never run `uninstall Git.Git` here: it would really
+   uninstall Git.
+
+   ```powershell
+   Invoke-Borc -Arguments uninstall, '@local/borc-check-reboot'
+   git -C $check\settings diff
+   ```
+
+   Then remove the line `  - winget: Git.Git` in an editor, and run:
+
+   ```powershell
+   Invoke-Borc -Arguments install, Git.Git
+   git -C $check\settings diff
+   ```
+
+5. **The profile block, on a temporary profile.** Expect one warning for
+   `20-broken.ps1`, then the two check lines, then `$check` as the
+   location.
+
+   ```powershell
+   & (Get-Module Borc) { param($Path) Set-BorcProfileBlock -Path $Path } "$check\profile.ps1"
+   Get-Content $check\profile.ps1
+   pwsh -NoProfile -Command "Set-Location `$HOME; `$env:BORC_HOME = '$check'; . '$check\profile.ps1'; Get-BorcCheck; Get-BorcCheckAfter; (Get-Location).Path"
+   ```
+
+Clean up with `Remove-Item $check -Recurse -Force` after closing the window.
+
+#### Needs a fresh Windows 11 machine
+
+The recipe checks use `tests/manual/settings`. Push it to a test repo (one
+branch, for example `check`), or leave the URL empty during install and copy
+`borc/cookbook/`, `borc/scripts/` and `borc/borc.yaml` into
+`BORC_SETTINGS` afterwards.
+
+1. [ ] **The one-liner with a restricted execution policy.** It works, and
+   `Get-ExecutionPolicy -List` is the same before and after.
+2. [ ] **Empty URL and new branch.** An empty URL creates the starter repo,
+   with nothing committed. A new branch name lists the remote branches and
+   creates the branch from the chosen one.
+3. [ ] **One UAC prompt.** `borc apply` shows a single UAC prompt for the
+   main run (plus one for the reboot run, if any). A second `borc apply`
+   changes nothing.
+4. [ ] **A missing parameter leaves the default.** Without `greeting`,
+   `%LOCALAPPDATA%\borc-check\greeting.txt` does not exist. With
+   `greeting: hello` under `@local/borc-check-param`, it does.
+5. [ ] **Secrets.** `BORC_CHECK_SECRET` is asked once.
+   `%LOCALAPPDATA%\borc-check\secret.txt` reads `found=True elevated=True`.
+   The next `apply` does not ask again.
+6. [ ] **Reboot recipe.** `@local/borc-check-reboot` runs first, the restart
+   message appears, and the exit code is 3010. After the restart, `apply`
+   finishes.
+7. [ ] **Updates.** `self-update` moves the engine to the latest `main`, and
+   `apply` shows the update notice while `main` is ahead. After you edit the
+   text inside the borc block of `$PROFILE.CurrentUserAllHosts`, a
+   `self-update` puts it back and leaves the rest of the profile alone.
+8. [ ] **Terminal.** A new PowerShell 7 terminal opens in `BORC_HOME`,
+   `Get-BorcCheck` works, and `20-broken.ps1` only prints a warning.
+9. [ ] **Cross-recipe `dependsOn` and the WinGet rules.**
+   `%LOCALAPPDATA%\borc-check\requires.txt` exists and the
+   `@local/borc-check-requires` unit did not fail. The generated
+   configuration next to the log shows the `dependsOn`. The WinGet file
+   rules hold on Windows 11.
+10. [ ] **Windows 10.** On Windows 10 22H2 the warning appears and the run
+    continues.
+11. [ ] **Testing a branch.** The one-liner with `BORC_BRANCH` (README,
+    Development) installs the engine from that branch. `self-update` follows
+    it, and the normal one-liner switches the engine back to `main`. The
+    backtick form works from a PowerShell prompt.
+
+Also to verify on a real machine:
+
+- **The DSC form:** the `dependsOn` form, and the prefixed names (with `/`,
+  `:` and spaces) inside `resourceId`.
+- **winget:** the plain `Microsoft.WinGet/Package` unit form, the
+  `winget configure` flags, and the exit codes `0x8A15002B`, `0x8A150014`
+  and `0x8A150061`.
+- **Restart detection:** the registry keys after enabling a Windows feature.
+- **Installer modules:** `Install-Module -Force` under PowerShellGet 1.0,
+  and `Repair-WinGetPackageManager -Latest` without admin rights.
+- **Elevated units:** `Get-BorcSecret` and `BORC_SETTINGS` inside elevated
+  units, and the case where a standard user elevates with another admin
+  account.
+- **`borc.cmd`** with LF line endings under cmd.exe.
+- **Execution policy:** the pwsh 7 default policy lets the profile block
+  load `borc/scripts/`.
+- **The user `PATH`** change reaches new terminals without a logoff.
+
+---
+
+## Step 8: documentation (2026-10-24)
+
+### Done
+
+- Wrote `README.md` and `docs/`:
+  - `getting-started.md`;
+  - `borc-yaml.md`;
+  - `writing-recipes.md`;
+  - `commands.md`;
+  - `troubleshooting.md`;
+  - `design.md`.
+- Every YAML block is a file under `docs/examples/`. The tests check that
+  the block matches the file and that borc accepts it: the full example tree
+  goes through `Get-BorcPlan` and the generator, and fragments must parse.
+- `commands.md` shows every help page; a test checks them word for word.
+- The URL test covers the docs, the README, the template and install.ps1.
+- Reread the docs against the code. The error tables were missing several
+  messages the code produces; I added them.
+
+### Assumptions
+
+- Recipe snippets in `writing-recipes.md` (the header, `dependsOn`, a
+  placeholder, a secret, a symlink) are fragment files under
+  `docs/examples/fragments/`. They are checked for valid YAML and for the
+  exact WinGet header, not run through borc.
+
+### Questions
+
+- None new.
+
+### Deviations
+
+- None.
+
+### To verify
+
+- Nothing new.
+
+---
+
 ## Step 7: commands, entry points and install.ps1 (2026-10-24)
 
 ### Done

@@ -1,0 +1,9 @@
+# Config repo for the manual checks in REPORT.md. Not a real configuration.
+apps:
+  - winget: Git.Git
+  - recipe: '@local/borc-check-param'
+  - recipe: '@local/borc-check-requires'
+  - recipe: '@local/borc-check-secret'
+  - recipe: '@local/borc-check-reboot'
+secrets:
+  BORC_CHECK_SECRET: any value, used to check that an elevated unit can read a secret

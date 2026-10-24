@@ -1,0 +1,23 @@
+# Manual check: requires becomes a cross-recipe dependsOn. Fails unless
+# base.txt from @local/borc-check-param exists when it runs.
+#
+# Layout under BORC_SETTINGS: none.
+borc:
+  description: borc manual check for requires
+  requires: ['@local/borc-check-param']
+$schema: https://raw.githubusercontent.com/PowerShell/DSC/main/schemas/2023/08/config/document.json
+metadata:
+  winget:
+    processor: dscv3
+resources:
+  - name: after base file
+    type: Microsoft.DSC.Transitional/PowerShellScript
+    properties:
+      input: requires.txt
+      testScript: |
+        param($file)
+        Test-Path -LiteralPath (Join-Path $env:LOCALAPPDATA "borc-check\$file")
+      setScript: |
+        param($file)
+        if (-not (Test-Path -LiteralPath (Join-Path $env:LOCALAPPDATA 'borc-check\base.txt'))) { throw 'base.txt is missing: requires did not order the units' }
+        Set-Content -LiteralPath (Join-Path $env:LOCALAPPDATA "borc-check\$file") -Value 'ok'

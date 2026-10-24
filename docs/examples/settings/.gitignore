@@ -1,0 +1,7 @@
+# IntelliJ IDEA writes many files; keep only the code styles.
+idea/*
+!idea/codestyles/
+
+# Track the git config, not the credentials helper cache.
+git/*
+!git/config

@@ -1,0 +1,69 @@
+# Node.js LTS, with an optional npm cache location and the company registry
+# token.
+#
+# Layout under BORC_SETTINGS:
+#   npm/npmrc         user npm configuration, tracked in the config repo
+#
+# The borc header. borc reads it and strips it before running winget.
+borc:
+  description: Node.js LTS and npm, configured from BORC_SETTINGS
+  parameters:
+    npmCache: npm cache location (optional; npm's default when not given)
+  secrets: [NPM_TOKEN]
+
+# The WinGet file header. Copy it exactly: winget 1.29 rejects other schema URLs.
+$schema: https://raw.githubusercontent.com/PowerShell/DSC/main/schemas/2023/08/config/document.json
+metadata:
+  winget:
+    processor: dscv3
+
+resources:
+  # Installs Node.js. borc upgrade also upgrades every Microsoft.WinGet/Package
+  # unit of a listed recipe.
+  - name: node package
+    type: Microsoft.WinGet/Package
+    properties:
+      id: OpenJS.NodeJS.LTS
+      source: winget
+
+  # Points npm at the user config tracked in BORC_SETTINGS. input carries one
+  # value, received by the script's single param.
+  - name: npm userconfig
+    type: Microsoft.DSC.Transitional/PowerShellScript
+    properties:
+      input: npm\npmrc
+      testScript: |
+        param($relativePath)
+        $wanted = Join-Path $env:BORC_SETTINGS $relativePath
+        [Environment]::GetEnvironmentVariable('NPM_CONFIG_USERCONFIG', 'User') -eq $wanted
+      setScript: |
+        param($relativePath)
+        $wanted = Join-Path $env:BORC_SETTINGS $relativePath
+        [Environment]::SetEnvironmentVariable('NPM_CONFIG_USERCONFIG', $wanted, 'User')
+
+  # Uses the optional parameter. Without npmCache in borc.yaml, borc drops
+  # this whole unit and npm keeps its default cache.
+  - name: npm cache
+    type: Microsoft.DSC.Transitional/PowerShellScript
+    properties:
+      input: '{{npmCache}}'
+      testScript: |
+        param($path)
+        (npm config get cache) -eq $path
+      setScript: |
+        param($path)
+        npm config set cache $path
+
+  # Reads a secret at run time. The value never appears in this file, in the
+  # generated configuration or in the log.
+  - name: npm registry token
+    type: Microsoft.DSC.Transitional/PowerShellScript
+    properties:
+      input: npm.example.com
+      testScript: |
+        param($registry)
+        [bool](npm config get "//${registry}/:_authToken")
+      setScript: |
+        param($registry)
+        . "$env:LOCALAPPDATA\borc\Get-BorcSecret.ps1"
+        npm config set "//${registry}/:_authToken" (Get-BorcSecret NPM_TOKEN)

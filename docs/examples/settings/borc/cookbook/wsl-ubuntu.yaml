@@ -1,0 +1,36 @@
+# Ubuntu on WSL. Enables the Windows features first, which needs admin rights
+# and a restart.
+#
+# Layout under BORC_SETTINGS: none.
+borc:
+  description: WSL with Ubuntu
+  reboot: true
+$schema: https://raw.githubusercontent.com/PowerShell/DSC/main/schemas/2023/08/config/document.json
+metadata:
+  winget:
+    processor: dscv3
+resources:
+  - name: wsl features
+    type: Microsoft.DSC.Transitional/WindowsPowerShellScript
+    metadata:
+      securityContext: elevated
+    properties:
+      input: Microsoft-Windows-Subsystem-Linux,VirtualMachinePlatform
+      testScript: |
+        param($features)
+        $states = foreach ($feature in $features -split ',') {
+          (Get-WindowsOptionalFeature -Online -FeatureName $feature).State -eq 'Enabled'
+        }
+        -not ($states -contains $false)
+      setScript: |
+        param($features)
+        foreach ($feature in $features -split ',') {
+          Enable-WindowsOptionalFeature -Online -FeatureName $feature -All -NoRestart | Out-Null
+        }
+  - name: ubuntu package
+    type: Microsoft.WinGet/Package
+    dependsOn:
+      - "[resourceId('Microsoft.DSC.Transitional/WindowsPowerShellScript','wsl features')]"
+    properties:
+      id: Canonical.Ubuntu.2404
+      source: winget
