@@ -1,0 +1,27 @@
+# Editors and IDEs
+.vscode/
+.idea/
+.vs/
+*.code-workspace
+*.swp
+*~
+
+# Test results (Pester and others)
+TestResults/
+testResults.xml
+coverage.xml
+*.trx
+
+# Build output
+out/
+build/
+dist/
+*.nupkg
+
+# Logs
+*.log
+logs/
+
+# Windows
+Thumbs.db
+desktop.ini
