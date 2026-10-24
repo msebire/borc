@@ -4,6 +4,73 @@ Latest report on top.
 
 ---
 
+## Step 5: borc.yaml text edits and profile block (2026-10-24)
+
+### Done
+
+- `ConfigEdit.ps1` adds and removes `apps` items as text. Tests show that
+  comments, indentation, CRLF and the rest of the file survive.
+- `ProfileBlock.ps1` adds or replaces the marked block and leaves the rest of
+  the profile alone. A child pwsh process checks load order, the single
+  warning for a broken script, and the move to `BORC_HOME`.
+- 79 tests pass.
+
+### Assumptions
+
+- A new item goes after the last real item of `apps` (with its
+  continuation lines), so commented examples further down stay in place.
+- Removing a recipe item removes its more-indented lines (`parameters` and
+  their comments) too.
+- "Starts in the user's home folder" means the current folder is exactly
+  `$HOME` when the profile runs.
+
+### Questions
+
+- None.
+
+### Deviations
+
+- None.
+
+### To verify
+
+- Nothing new.
+
+---
+
+## Step 4: merged configuration generator (2026-10-24)
+
+### Done
+
+- `Generator.ps1` builds the reboot run and the merged main run, plus the
+  one-recipe documents for `--debug` and `install`.
+- Golden files are in `tests/fixtures/golden/` (rewrite them with
+  `BORC_UPDATE_GOLDEN=1` in the process).
+
+### Assumptions
+
+- Plain `winget` and `msstore` apps come first in the main run, so recipes
+  can count on them; recipes follow in `requires` order.
+- A recipe's own `dependsOn` entries are renamed to the prefixed names. An
+  entry pointing at a dropped unit is removed.
+- `requires` on a recipe in the other run adds no `dependsOn`: run order
+  already holds.
+
+### Questions
+
+- None.
+
+### Deviations
+
+- None.
+
+### To verify
+
+- The plain package unit form: `Microsoft.WinGet/Package` with `id` and
+  `source` (`winget` or `msstore`).
+
+---
+
 ## Step 3: borc.yaml and recipe parsing (2026-10-24)
 
 ### Done
