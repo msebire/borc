@@ -180,6 +180,17 @@ A merge would create a commit, and borc never commits. Stopping when the
 config repo cannot be fetched keeps `apply` predictable: it always applies the
 latest configuration, or nothing.
 
+### Output in steps, with every command framed
+
+borc's own messages, Git and winget all write to the same console, and a
+long run was hard to follow: it was not clear where a step, or an install,
+started and ended. Numbered step headers, a start and an end line around
+each external command, and a summary at the end let the user find their place
+at a glance and read the result first. Colours help, but the words always say
+the result too: the output stays readable in the log, when pasted into an
+issue, and without colour. Tool output is still shown in full, because borc
+shows winget's errors as they come.
+
 ### Trust winget on failures
 
 winget's errors are shown as they come and its exit code is reported. Retry

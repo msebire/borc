@@ -67,8 +67,9 @@ function Invoke-BorcCommand {
   param([string] $Command, [string[]] $Options, [string[]] $Positional)
   $paths = Get-BorcPaths
   Start-BorcLog -Directory $paths.Logs -Command $Command | Out-Null
+  $code = 1
   try {
-    $code = switch ($Command) {
+    $result = switch ($Command) {
       'apply' { Invoke-BorcApply -Paths $paths -Preview:('--what-if' -in $Options) -OneByOne:('--debug' -in $Options) }
       'upgrade' { Invoke-BorcUpgrade -Paths $paths }
       'install' { Invoke-BorcInstall -Paths $paths -App $Positional[0] }
@@ -76,13 +77,14 @@ function Invoke-BorcCommand {
       'search' { Invoke-BorcSearch -Paths $paths -Term $Positional[0] }
       'self-update' { Invoke-BorcSelfUpdate -Paths $paths }
     }
-    [int](@($code)[-1])
+    $code = [int](@($result)[-1])
   } catch {
     Write-BorcLog -Message $_.Exception.Message -Level Error
-    1
   } finally {
+    Complete-BorcRun -ExitCode $code
     Stop-BorcLog
   }
+  $code
 }
 
 function Assert-BorcSettings {
@@ -108,9 +110,4 @@ function Get-BorcAppKind {
   }
   if (-not $App.Contains('.')) { return 'msstore' }
   'winget'
-}
-
-function Format-BorcExitCode {
-  param([Parameter(Mandatory)] [int] $Code)
-  '{0} (0x{1:X8})' -f $Code, $Code
 }

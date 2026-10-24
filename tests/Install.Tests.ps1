@@ -72,6 +72,51 @@ foreach (`$encoding in 'utf-8', 'windows-1252') {
   }
 }
 
+Describe 'Installer output' {
+  BeforeEach {
+    $script:SavedNoColor = $env:NO_COLOR
+    $env:NO_COLOR = $null
+    $InstallSteps.List.Clear()
+    $InstallSteps.Current = $null
+    $script:Shown = New-Object System.Collections.ArrayList
+    Mock Write-Host { [void]$script:Shown.Add([pscustomobject]@{ Text = "$Object"; Color = $ForegroundColor }) }
+  }
+  AfterEach { $env:NO_COLOR = $script:SavedNoColor }
+
+  It 'shows numbered steps and a summary that marks the failing step' {
+    Start-InstallStep -Name 'Windows version'
+    Start-InstallStep -Name 'Updating winget'
+    Complete-InstallStep -Status 'failed'
+    Write-InstallSummary
+    $texts = $script:Shown.Text
+    $texts | Should -Contain '==> [1/5] Windows version'
+    $texts | Should -Contain '==> [2/5] Updating winget'
+    ($texts -join "`n") | Should -Match 'done     \[1/5\] Windows version'
+    ($texts -join "`n") | Should -Match 'failed   \[2/5\] Updating winget'
+    $texts | Should -Contain '  Stopped after step 2 of 5.'
+    ($script:Shown | Where-Object Text -Like '==>*').Color | Should -Be @('Cyan', 'Cyan')
+  }
+
+  It 'frames an external command and treats the given codes as fine' {
+    Invoke-InstallCommand -FilePath 'git' -Arguments @('--version') | Should -Be 0
+    $script:Shown[0].Text | Should -Be '  > git --version'
+    $script:Shown[-1].Text | Should -Match '^  < done in \d+s$'
+    $script:Shown[-1].Color | Should -Be 'Green'
+  }
+
+  It 'ends a failing command with its exit code' {
+    Invoke-InstallCommand -FilePath 'git' -Arguments @('-C', 'Z:\no\such\folder', 'status') 2>$null | Should -Not -Be 0
+    $script:Shown[-1].Text | Should -Match '^  < failed, exit code \d+, after \d+s$'
+    $script:Shown[-1].Color | Should -Be 'Red'
+  }
+
+  It 'drops colours with NO_COLOR' {
+    $env:NO_COLOR = '1'
+    Start-InstallStep -Name 'Windows version'
+    $script:Shown.Color | Where-Object { $_ } | Should -BeNullOrEmpty
+  }
+}
+
 Describe 'Engine branch' {
   BeforeEach { $script:SavedBranch = $env:BORC_BRANCH }
   AfterEach { $env:BORC_BRANCH = $script:SavedBranch }

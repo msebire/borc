@@ -3,14 +3,17 @@
 function Invoke-BorcUpgrade {
   param([Parameter(Mandatory)] $Paths)
   Assert-BorcSettings -Paths $Paths
+  Start-BorcSteps -Total 2
+  Start-BorcStep -Name 'Checking borc.yaml and the recipes'
   $plan = Get-BorcPlan -SettingsRoot $Paths.Settings -RecipesRoot $Paths.Recipes
   if ($plan.Errors.Count -gt 0) { Write-BorcPlanErrors -Errors $plan.Errors; return 1 }
+  $packages = @(Get-BorcListedPackages -Plan $plan)
+  Start-BorcStep -Name "Upgrading $($packages.Count) package(s)"
+  $okCodes = @{ $script:WingetNoApplicableUpgrade = 'no upgrade available'; $script:WingetNoPackageFound = 'not installed; borc apply installs it' }
   $failed = 0
-  foreach ($package in @(Get-BorcListedPackages -Plan $plan)) {
-    $code = Invoke-BorcWinget -Arguments (Get-BorcPackageArguments -Verb 'upgrade' -Source $package.Source -Id $package.Id)
-    if ($code -eq $script:WingetNoPackageFound) {
-      Write-BorcLog -Message "$($package.Id) is not installed; borc apply installs it."
-    } elseif ($code -ne 0 -and $code -ne $script:WingetNoApplicableUpgrade) {
+  foreach ($package in $packages) {
+    $code = Invoke-BorcWinget -Arguments (Get-BorcPackageArguments -Verb 'upgrade' -Source $package.Source -Id $package.Id) -OkCodes $okCodes
+    if (-not $okCodes.ContainsKey($code) -and $code -ne 0) {
       Write-BorcLog -Message "winget could not upgrade $($package.Id), exit code $(Format-BorcExitCode -Code $code)." -Level Error
       $failed++
     }
@@ -27,9 +30,11 @@ function Invoke-BorcInstall {
   $config = ConvertTo-BorcConfig -Text (Read-BorcTextFile -Path $configPath)
   $listed = [bool]($config.Apps | Where-Object { $_.Kind -eq $kind -and $_.Id -eq $App })
 
+  Start-BorcSteps -Total 3
   $code = if ($kind -eq 'recipe') { Install-BorcRecipe -Paths $Paths -Id $App -Config $config } else { Install-BorcPlainApp -Kind $kind -Id $App -Listed $listed }
   if ($code -ne 0) { return $code }
-  if ($listed) { return 0 }
+  Start-BorcStep -Name 'Updating borc.yaml'
+  if ($listed) { Write-BorcLog -Message "$App is already listed in $configPath."; return 0 }
   Set-BorcConfigText -Path $configPath -Text (Add-BorcAppEntry -Text (Read-BorcTextFile -Path $configPath) -Kind $kind -Id $App)
   Write-BorcLog -Message "Added $App to $configPath. Review the change and commit it when you are ready."
   0
@@ -37,11 +42,14 @@ function Invoke-BorcInstall {
 
 function Install-BorcPlainApp {
   param([Parameter(Mandatory)] [string] $Kind, [Parameter(Mandatory)] [string] $Id, [bool] $Listed)
+  Start-BorcStep -Name "Checking $Id"
   if ($Kind -eq 'winget' -and -not $Listed -and -not (Test-BorcWingetPackageExists -Id $Id)) {
     Write-BorcLog -Message "winget has no package with the ID $Id. Try borc search." -Level Error
     return 1
   }
-  if (Test-BorcPackageInstalled -Id $Id) {
+  $installed = Test-BorcPackageInstalled -Id $Id
+  Start-BorcStep -Name "Installing $Id"
+  if ($installed) {
     Write-BorcLog -Message "$Id is already installed."
     return 0
   }
@@ -55,6 +63,7 @@ function Install-BorcPlainApp {
 
 function Install-BorcRecipe {
   param([Parameter(Mandatory)] $Paths, [Parameter(Mandatory)] [string] $Id, [Parameter(Mandatory)] $Config)
+  Start-BorcStep -Name "Checking $Id and its secrets"
   $repoName = ($Id -split '/')[0]
   $repo = $Config.Recipes | Where-Object Name -EQ $repoName
   if ($repo -and -not (Test-Path -LiteralPath (Join-Path $Paths.Recipes $repo.Name))) {
@@ -69,6 +78,7 @@ function Install-BorcRecipe {
   foreach ($name in $recipe.Secrets) { $secrets[$name] = $plan.Config.Secrets[$name] }
   Request-BorcMissingSecrets -Secrets $secrets
 
+  Start-BorcStep -Name "Installing $Id"
   $single = @(New-BorcSingleDocuments -Plan $plan -Ids @($Id))[0]
   if (-not $single.Document) {
     Write-BorcLog -Message "$Id has nothing to run with the parameters borc.yaml gives it."
@@ -83,16 +93,20 @@ function Invoke-BorcUninstall {
   $kind = Get-BorcAppKind -App $App
   $configPath = Join-Path $Paths.Settings 'borc\borc.yaml'
   $text = Read-BorcTextFile -Path $configPath
+  Start-BorcSteps -Total 2
 
   if ($kind -eq 'recipe') {
+    Start-BorcStep -Name 'Updating borc.yaml'
     $updated = Remove-BorcAppEntry -Text $text -Kind $kind -Id $App
     if ($null -eq $updated) { Write-BorcLog -Message "$App is not listed in $configPath." -Level Error; return 1 }
     Set-BorcConfigText -Path $configPath -Text $updated
     Write-BorcLog -Message "Removed $App from $configPath. Review the change and commit it when you are ready."
+    Start-BorcStep -Name 'Packages the recipe installed'
     Show-BorcRecipeLeftovers -Paths $Paths -Id $App
     return 0
   }
 
+  Start-BorcStep -Name "Uninstalling $App"
   if (Test-BorcPackageInstalled -Id $App) {
     $code = Invoke-BorcWinget -Arguments (Get-BorcPackageArguments -Verb 'uninstall' -Source $kind -Id $App)
     if ($code -ne 0) {
@@ -102,6 +116,7 @@ function Invoke-BorcUninstall {
   } else {
     Write-BorcLog -Message "$App is not installed."
   }
+  Start-BorcStep -Name 'Updating borc.yaml'
   $updated = Remove-BorcAppEntry -Text $text -Kind $kind -Id $App
   if ($null -eq $updated) {
     Write-BorcLog -Message "$App is not listed in $configPath; there was no line to remove."

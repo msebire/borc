@@ -8,6 +8,46 @@ Every command except `help` writes a timestamped log to
 `%LOCALAPPDATA%\borc\logs`, keeps the last 20, and prints the log path at the
 end. Secret values are never logged.
 
+## Reading the output
+
+Every command except `help` shows its work in numbered steps, and the
+installer does the same:
+
+```text
+
+==> [1/5] Pulling the config repo (D:\settings)
+  > git -C D:\settings pull --ff-only
+  |   Already up to date.
+  < done in 1s
+
+==> [2/5] Pulling recipe repos
+...
+
+Summary:
+  done     [1/5] Pulling the config repo (D:\settings)  1s
+  done     [2/5] Pulling recipe repos                   3s
+  failed   [3/5] Checking borc.yaml and the recipes     0s
+  Stopped after step 3 of 5.
+Log: C:\Users\you\AppData\Local\borc\logs\20261024-101500-123-apply.log
+```
+
+- `==> [n/total]` starts a step. A blank line separates the steps.
+- `>` starts an external command (`git`, `winget`). Its output follows,
+  indented after `|`, and `<` ends it with the result and the time it took:
+  `done in 14s`, or `failed, exit code 0x8A150014, after 3s`. A code that is
+  not a failure says what it means, such as `done in 2s (no upgrade
+  available)`. The installer shows winget's output as winget draws it, without
+  the `|` indent.
+- The summary lists every step reached with `done`, `failed` or `restart`
+  (Windows needs a restart) and its duration. When a command stops early, the
+  last line says after which step.
+
+In the console, step headers are cyan, `done` is green, `failed` and errors
+are red, warnings and `restart` are yellow, and tool output is dark gray. The
+words always say the result too, so nothing depends on the colour. Set the
+`NO_COLOR` environment variable to turn colours off. The log file holds the
+same lines with the time in front and no colours.
+
 ## borc
 
 <!-- help: index -->

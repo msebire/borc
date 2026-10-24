@@ -1,17 +1,22 @@
 ﻿# Git operations on the config repo, recipe repos and the engine clone.
 # borc never commits or pushes: nothing here runs commit, push or merge.
 
+# Without -Quiet, the command is shown between a start and an end line with its
+# output indented; quiet calls are internal checks and only go to the log.
 function Invoke-BorcGit {
   param([Parameter(Mandatory)] [string[]] $Arguments, [switch] $Quiet)
   $ErrorActionPreference = 'Continue'
-  Write-BorcLog -Message "git $($Arguments -join ' ')" -LogOnly
+  $started = Get-Date
+  if ($Quiet) { Write-BorcLog -Message "git $($Arguments -join ' ')" -LogOnly } else { Write-BorcCommandStart -Command "git $($Arguments -join ' ')" }
   $lines = [System.Collections.Generic.List[string]]::new()
   & git @Arguments 2>&1 | ForEach-Object {
     $line = "$_"
     $lines.Add($line)
     if ($Quiet) { Write-BorcLog -Message $line -LogOnly } else { Write-BorcOutputLine -Line $line }
   }
-  [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = @($lines) }
+  $code = $LASTEXITCODE
+  if (-not $Quiet) { Write-BorcCommandEnd -ExitCode $code -Duration ((Get-Date) - $started) }
+  [pscustomobject]@{ ExitCode = $code; Output = @($lines) }
 }
 
 function Assert-BorcGit {

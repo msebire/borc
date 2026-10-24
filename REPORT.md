@@ -4,6 +4,64 @@ Latest report on top.
 
 ---
 
+## Step 10: readable output (2026-10-24)
+
+### Done
+
+- The maintainer found the output hard to follow: borc's messages, Git's and
+  winget's output ran together, and nothing showed where a step or an install
+  started and ended. Agreed changes:
+  1. **Numbered step headers**, `==> [n/total] ...`, with a blank line
+     before each step.
+  2. **A start and an end line around each external command**: `> command`,
+     the output indented after `|`, then `< done in 14s` or
+     `< failed, exit code ..., after 3s`. Codes that are not failures say
+     what they mean ("no upgrade available").
+  3. **A summary** with each step's result (`done`, `failed`, `restart`)
+     and duration, and "Stopped after step n of total" when a run ends early.
+  4. **Colours** for the console only: step headers cyan, done green,
+     failed red, warnings and restart yellow, tool output dark gray.
+     `NO_COLOR` turns them off. The log gets the same lines with the time
+     and no colours.
+- Steps in every command:
+  - `apply`: 5 steps.
+  - `apply --what-if`: 4 steps, with the check last so a failure points at
+    it.
+  - `upgrade`, `uninstall`, `search` and `self-update`: 2 steps each.
+  - `install`: 3 steps.
+  - setup: 5 steps.
+  - `install.ps1`: 5 steps.
+- `install.ps1` runs its external commands with `Start-Process`, so their
+  output stays on the console as winget draws it, and only the exit code
+  comes back. This fixes a bug where git's output was mixed into the value a
+  function returned.
+- `docs/commands.md` explains how to read the output. `docs/design.md`,
+  `CHANGELOG.md` and the tests are updated; 190 tests pass. A sample
+  `apply --what-if` on a throwaway repo read as expected.
+
+### Assumptions
+
+- `--what-if` shows the steps in the order fetch, apps, secrets, check.
+- The installer's summary covers its own five steps; setup and `borc apply`
+  print their own steps and summaries inside step 5.
+
+### Questions
+
+- None.
+
+### Deviations
+
+- None.
+
+### To verify
+
+- Colours and winget's progress rendering in Windows Terminal and in the
+  classic console, under PowerShell 7 and Windows PowerShell 5.1.
+- `Start-Process -NoNewWindow` keeps the setup prompts (`Read-Host`)
+  working in the installer.
+
+---
+
 ## Step 9: installer fix from the first branch test (2026-10-24)
 
 ### Done

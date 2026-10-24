@@ -3,6 +3,9 @@
 
 function Invoke-BorcApplyPreview {
   param([Parameter(Mandatory)] $Paths)
+  # The check comes last, so a failure in the summary points at it.
+  Start-BorcSteps -Total 4
+  Start-BorcStep -Name 'Fetching the config repo and recipe repos (no merge)'
   $dirty = @(Get-BorcDirtyFiles -Path $Paths.Settings)
   if ($dirty.Count -gt 0) { Write-BorcLog -Message (Format-BorcDirtyMessage -Path $Paths.Settings -Files $dirty) -Level Warning }
 
@@ -17,9 +20,13 @@ function Invoke-BorcApplyPreview {
 
   $plan = Get-BorcPlan -SettingsRoot $Paths.Settings -RecipesRoot $Paths.Recipes -ReadFile (New-BorcPreviewReader -Refs $refs)
   $errors = @($plan.Errors | Where-Object { -not (Test-BorcNotClonedError -Message $_ -Repos $notCloned) })
+  Start-BorcStep -Name 'What would be installed'
   Show-BorcPreviewApps -Plan $plan
+  Start-BorcStep -Name 'Secrets that would be asked for'
   Show-BorcPreviewSecrets -Plan $plan
+  Start-BorcStep -Name 'Checking borc.yaml and the recipes'
   if ($errors.Count -gt 0) { Write-BorcPlanErrors -Errors $errors; return 1 }
+  Write-BorcPlanCounts -Plan $plan
   Write-BorcLog -Message 'Nothing was changed (--what-if).'
   0
 }
@@ -68,7 +75,6 @@ function Test-BorcNotClonedError {
 function Show-BorcPreviewApps {
   param([Parameter(Mandatory)] $Plan)
   if (-not $Plan.Config) { return }
-  Write-BorcLog -Message 'Apps:'
   foreach ($app in $Plan.Config.Apps) {
     if ($app.Kind -eq 'recipe') { continue }
     $state = if (Test-BorcPackageInstalled -Id $app.Id) { 'installed' } else { 'would be installed' }
@@ -87,6 +93,6 @@ function Show-BorcPreviewSecrets {
   param([Parameter(Mandatory)] $Plan)
   if (-not $Plan.Config) { return }
   $missing = @(Get-BorcMissingSecrets -Secrets $Plan.Config.Secrets)
-  if ($missing.Count -eq 0) { Write-BorcLog -Message 'Secrets: none would be asked for.'; return }
-  Write-BorcLog -Message "Secrets that would be asked for: $($missing -join ', ')"
+  if ($missing.Count -eq 0) { Write-BorcLog -Message '  None: every declared secret is in Windows Credential Manager.'; return }
+  foreach ($name in $missing) { Write-BorcLog -Message "  $name ($($Plan.Config.Secrets[$name]))" }
 }

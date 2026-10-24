@@ -9,7 +9,8 @@
     $roots['@local'] = Join-Path $Paths.Settings 'borc\cookbook'
   }
 
-  Write-BorcLog -Message 'Recipes:'
+  Start-BorcSteps -Total 2
+  Start-BorcStep -Name "Recipes matching '$Term'"
   $found = 0
   foreach ($repo in $roots.Keys) {
     if (-not (Test-Path -LiteralPath $roots[$repo])) {
@@ -23,8 +24,8 @@
   }
   if ($found -eq 0) { Write-BorcLog -Message '  No recipe matches.' }
 
-  Write-BorcLog -Message 'winget:'
-  $code = Invoke-BorcWinget -Arguments @('search', $Term, '--accept-source-agreements', '--disable-interactivity')
+  Start-BorcStep -Name "winget packages matching '$Term'"
+  $code = Invoke-BorcWinget -Arguments @('search', $Term, '--accept-source-agreements', '--disable-interactivity') -OkCodes @{ $script:WingetNoPackageFound = 'no match' }
   if ($code -ne 0 -and $code -ne $script:WingetNoPackageFound) { return 1 }
   0
 }

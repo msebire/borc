@@ -33,6 +33,10 @@ The version number is chosen when the release is cut.
   Windows Credential Manager.
 - The starter template for a new config repo.
 - Logs in `%LOCALAPPDATA%\borc\logs`, keeping the last 20 runs.
+- Readable output: numbered steps separated by blank lines, a start and an
+  end line around every `git` and `winget` command, a summary with each
+  step's result and duration, and colours (`NO_COLOR` turns them off), in
+  the `borc` command and in the installer.
 - `BORC_BRANCH`, for maintainers: installs the engine from another branch
   to test it before release. Rerunning the installer without it goes back to
   `main`.

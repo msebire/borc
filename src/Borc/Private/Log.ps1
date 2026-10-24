@@ -35,30 +35,36 @@ function Remove-BorcOldLogs {
   }
 }
 
+# One line in the log file, with the time; plain text, never colours.
+function Add-BorcLogLine {
+  param([Parameter(Mandatory)] [AllowEmptyString()] [string] $Line)
+  if (-not $script:BorcLogPath) { return }
+  $text = if ($Line) { "$(Get-Date -Format 'HH:mm:ss') $Line`n" } else { "`n" }
+  [IO.File]::AppendAllText($script:BorcLogPath, $text)
+}
+
 function Write-BorcLog {
   param(
     [Parameter(Mandatory)] [AllowEmptyString()] [string] $Message,
     [ValidateSet('Info', 'Warning', 'Error')] [string] $Level = 'Info',
     [switch] $LogOnly
   )
-  if ($script:BorcLogPath) {
-    $prefix = if ($Level -eq 'Info') { '' } else { "$($Level.ToUpperInvariant()): " }
-    [IO.File]::AppendAllText($script:BorcLogPath, "$prefix$Message`n")
-  }
+  $prefix = if ($Level -eq 'Info') { '' } else { "$($Level.ToUpperInvariant()): " }
+  Add-BorcLogLine -Line "$prefix$Message"
   if ($LogOnly) { return }
   switch ($Level) {
-    'Warning' { Write-Host "Warning: $Message" -ForegroundColor Yellow }
-    'Error' { Write-Host "Error: $Message" -ForegroundColor Red }
-    default { Write-Host $Message }
+    'Warning' { Write-BorcConsole -Text "Warning: $Message" -Color Yellow }
+    'Error' { Write-BorcConsole -Text "Error: $Message" -Color Red }
+    default { Write-BorcConsole -Text $Message }
   }
 }
 
-# Output of a tool run by borc: shown as is, and logged unless it is only a
-# progress spinner.
+# Output of a tool run by borc: shown indented under its command, and logged
+# unless it is only a progress spinner.
 function Write-BorcOutputLine {
   param([Parameter(Mandatory)] [AllowEmptyString()] [string] $Line)
-  Write-Host $Line
-  if ($script:BorcLogPath -and $Line -notmatch '^[\s\\|/\-]*$' -and $Line -notmatch '[█▒]') {
-    [IO.File]::AppendAllText($script:BorcLogPath, "$Line`n")
+  Write-BorcConsole -Text "  |   $Line" -Color DarkGray
+  if ($Line -notmatch '^[\s\\|/\-]*$' -and $Line -notmatch '[█▒]') {
+    Add-BorcLogLine -Line "  |   $Line"
   }
 }

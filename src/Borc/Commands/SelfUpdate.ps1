@@ -3,7 +3,10 @@
   if (-not (Test-BorcGitRepo -Path $Paths.Engine)) {
     throw "borc is not installed in $($Paths.Engine). Run the one-line installer again."
   }
+  Start-BorcSteps -Total 2
+  Start-BorcStep -Name 'Pulling the borc engine'
   Assert-BorcGit -Result (Invoke-BorcGit -Arguments @('-C', $Paths.Engine, 'pull', '--ff-only')) -Action 'update borc'
+  Start-BorcStep -Name 'Refreshing borc.cmd, Get-BorcSecret.ps1 and the profile block'
   $code = Invoke-BorcEngineRefresh -Paths $Paths
   if ($code -ne 0) { throw "The updated engine could not refresh its runtime files and profile block (exit code $code)." }
   $head = (Invoke-BorcGit -Arguments @('-C', $Paths.Engine, 'log', '-1', '--format=%h %cs') -Quiet).Output | Select-Object -First 1
@@ -19,8 +22,12 @@ function Invoke-BorcEngineRefresh {
   param([Parameter(Mandatory)] $Paths)
   $manifest = Join-Path $Paths.Engine 'src\Borc\Borc.psd1'
   $command = "`$ErrorActionPreference = 'Stop'; Import-Module -Name '$manifest'; & (Get-Module -Name Borc) { Update-BorcRuntime }"
+  $started = Get-Date
+  Write-BorcCommandStart -Command 'pwsh (updated engine): Update-BorcRuntime'
   & pwsh -NoLogo -NoProfile -NonInteractive -Command $command 2>&1 | ForEach-Object { Write-BorcOutputLine -Line "$_" }
-  $LASTEXITCODE
+  $code = $LASTEXITCODE
+  Write-BorcCommandEnd -ExitCode $code -Duration ((Get-Date) - $started)
+  $code
 }
 
 # Brings the files borc keeps outside the engine clone in line with it.

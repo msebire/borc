@@ -230,7 +230,8 @@ Describe 'Commands with winget mocked' {
         $text | Should -Match 'msstore 9NBLGGH4NNS1: would be installed'
         $text | Should -Match 'recipe recipes/wsl: would be applied \(runs first'
         $text | Should -Match "'npm prefix' skipped"
-        $text | Should -Match 'Secrets that would be asked for: NPM_TOKEN'
+        $text | Should -Match '==> \[3/4\] Secrets that would be asked for'
+        $text | Should -Match '  NPM_TOKEN \(token for the company npm registry\)'
         $text | Should -Match 'Nothing was changed'
       }
       git -C $script:Settings rev-parse HEAD | Should -Be $before

@@ -8,7 +8,12 @@ function Get-BorcMissingSecrets {
 
 function Request-BorcMissingSecrets {
   param([Parameter(Mandatory)] [System.Collections.IDictionary] $Secrets)
-  foreach ($name in (Get-BorcMissingSecrets -Secrets $Secrets)) {
+  $missing = @(Get-BorcMissingSecrets -Secrets $Secrets)
+  if ($missing.Count -eq 0) {
+    Write-BorcLog -Message $(if ($Secrets.Count -eq 0) { 'No secret is declared.' } else { "All $($Secrets.Count) declared secret(s) are in Windows Credential Manager." })
+    return
+  }
+  foreach ($name in $missing) {
     $value = Read-BorcSecretInput -Prompt "Secret $name ($($Secrets[$name]))"
     if ($null -eq $value -or $value.Length -eq 0) { throw "No value given for the secret $name." }
     Set-BorcStoredSecret -Name $name -Value $value

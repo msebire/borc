@@ -8,25 +8,36 @@ function Invoke-BorcSetup {
   param()
   $paths = Get-BorcPaths
   Start-BorcLog -Directory $paths.Logs -Command 'install' | Out-Null
+  Start-BorcSteps -Total 5
+  $code = 1
   try {
+    Start-BorcStep -Name 'PowerShell modules'
     Install-BorcYamlModule
+    Start-BorcStep -Name 'Folders: BORC_SETTINGS and BORC_HOME'
     $settings = Get-BorcFolderSetting -Name 'BORC_SETTINGS' -Purpose 'the config repo clone, where apps read their settings' -Example 'D:\settings'
     $homeFolder = Get-BorcFolderSetting -Name 'BORC_HOME' -Purpose 'your home base, where the terminal opens' -Example 'D:\sources'
+    Start-BorcStep -Name "Config repo ($settings)"
     Initialize-BorcSettingsInteractive -Path $settings
     New-Item -ItemType Directory -Path $homeFolder -Force | Out-Null
+    Start-BorcStep -Name 'The borc command, PATH and environment variables'
     Install-BorcRuntimeFiles -Paths $paths
     Add-BorcUserPath -Folder $paths.Bin
     # Set last: SetEnvironmentVariable tells running apps the environment changed.
     Set-BorcUserEnvironmentVariable -Name 'BORC_SETTINGS' -Value $settings
     Set-BorcUserEnvironmentVariable -Name 'BORC_HOME' -Value $homeFolder
+    Start-BorcStep -Name 'PowerShell 7 profile block'
     if (Set-BorcProfileBlock -Path (Get-BorcProfilePath)) { Write-BorcLog -Message "Added the borc block to $(Get-BorcProfilePath)." }
+    else { Write-BorcLog -Message 'The borc block is already up to date.' }
+    $code = 0
   } catch {
     Write-BorcLog -Message $_.Exception.Message -Level Error
+  } finally {
+    Complete-BorcRun -ExitCode $code
     Stop-BorcLog
-    return 1
   }
-  Stop-BorcLog
-  Write-Host 'borc is installed. Running borc apply.'
+  if ($code -ne 0) { return $code }
+  Write-BorcConsole -Text ''
+  Write-BorcConsole -Text 'borc is installed. Running borc apply.' -Color Cyan
   Invoke-Borc -Arguments @('apply')
 }
 
