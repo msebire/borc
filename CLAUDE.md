@@ -6,6 +6,9 @@ Repository conventions for Claude Code sessions.
 - Indentation: 2 spaces, no tabs.
 - Encoding: UTF-8 with BOM for PowerShell files (`*.ps1`, `*.psm1`, `*.psd1`) so
   Windows PowerShell 5.1 reads them correctly; UTF-8 without BOM for everything else.
+  Exception: `install.ps1` has no BOM and stays ASCII only, because the one-liner
+  pipes it through `irm | iex`, where a BOM becomes a character that breaks the
+  parsing. The tests check both.
 - Every file ends with a newline; trim trailing whitespace (except in Markdown).
 - Never commit secrets: no tokens, passwords, keys or credentials, not even in examples.
 

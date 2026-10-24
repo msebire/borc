@@ -1,4 +1,4 @@
-﻿<#
+<#
   borc installer. Runs under Windows PowerShell 5.1:
 
     powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/msebire/borc/main/install.ps1 | iex"

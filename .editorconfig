@@ -13,3 +13,7 @@ trim_trailing_whitespace = false
 
 [*.{ps1,psm1,psd1}]
 charset = utf-8-bom
+
+# Piped through irm | iex, where a BOM breaks the parsing; kept ASCII only.
+[/install.ps1]
+charset = utf-8

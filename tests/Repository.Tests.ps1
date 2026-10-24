@@ -19,7 +19,9 @@ Describe 'Repository conventions' {
     $bad = foreach ($file in $script:TrackedFiles) {
       $bytes = [IO.File]::ReadAllBytes($file)
       $hasBom = $bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF
-      $wantBom = [IO.Path]::GetExtension($file) -in '.ps1', '.psm1', '.psd1'
+      # install.ps1 is the exception: irm | iex keeps a BOM as a character.
+      $isInstaller = $file -eq (Join-Path $script:RepoRoot 'install.ps1')
+      $wantBom = ([IO.Path]::GetExtension($file) -in '.ps1', '.psm1', '.psd1') -and -not $isInstaller
       if ($hasBom -ne $wantBom) { $file }
     }
     $bad | Should -BeNullOrEmpty

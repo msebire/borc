@@ -4,6 +4,45 @@ Latest report on top.
 
 ---
 
+## Step 9: installer fix from the first branch test (2026-10-24)
+
+### Done
+
+- The maintainer's first `BORC_BRANCH` test failed with parse errors at
+  line 8 of `install.ps1`. Cause: the UTF-8 BOM. A file run from disk has
+  its BOM skipped, but `irm` returns the raw text, so the BOM stayed in
+  front of `<#`, the comment block never opened, and its text was parsed as
+  code.
+- `install.ps1` is now saved without a BOM; it was already ASCII only. The
+  exception is recorded in `CLAUDE.md` and `.editorconfig`, and the
+  repository test accepts it.
+- New tests check that `install.ps1` has no BOM and no non-ASCII byte, and
+  that it parses under Windows PowerShell 5.1 when decoded both as UTF-8 and
+  as Windows-1252, the ways `irm` may decode it.
+- Checked by hand: serving the file locally as `text/plain` and parsing what
+  `irm` returns gives 0 errors (the script was not run).
+
+### Assumptions
+
+- Only `install.ps1` is affected: every other PowerShell file is run or
+  dot-sourced from disk, where a BOM is needed for Windows PowerShell 5.1.
+
+### Questions
+
+- None.
+
+### Deviations
+
+- `install.ps1` breaks the "BOM for PowerShell files" convention, for the
+  reason above.
+
+### To verify
+
+- Item 1 and item 11 of the fresh-machine checklist, through the real
+  one-liner.
+
+---
+
 ## Final report (2026-10-24)
 
 ### Done

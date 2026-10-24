@@ -26,6 +26,25 @@ Describe 'install.ps1' {
     powershell.exe -NoProfile -NonInteractive -Command $command | Should -Be '0'
   }
 
+  It 'has no BOM and only ASCII characters, so irm | iex reads it unchanged' {
+    $bytes = [IO.File]::ReadAllBytes($script:InstallPath)
+    ($bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) | Should -BeFalse
+    @($bytes | Where-Object { $_ -gt 0x7F }).Count | Should -Be 0
+  }
+
+  It 'parses under Windows PowerShell 5.1 when decoded as irm would decode it' {
+    # irm returns the raw text: no BOM is skipped, and the charset may be guessed.
+    $command = @"
+`$bytes = [IO.File]::ReadAllBytes('$script:InstallPath')
+foreach (`$encoding in 'utf-8', 'windows-1252') {
+  `$errors = `$null
+  [System.Management.Automation.Language.Parser]::ParseInput([Text.Encoding]::GetEncoding(`$encoding).GetString(`$bytes), [ref]`$null, [ref]`$errors) | Out-Null
+  `$errors.Count
+}
+"@
+    powershell.exe -NoProfile -NonInteractive -Command $command | Should -Be @('0', '0')
+  }
+
   It 'accepts Windows 11, warns on Windows 10 22H2 and refuses older builds' {
     { Assert-BorcWindowsVersion -Build 22631 } | Should -Not -Throw
     Assert-BorcWindowsVersion -Build 19045 3>&1 | Should -Match 'Windows 10 22H2'
