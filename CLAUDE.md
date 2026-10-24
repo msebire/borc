@@ -36,7 +36,9 @@ The WinGet file rules were verified on a real machine (winget 1.29.380, DSC
 - `input` passes the values, and each script declares exactly one `param`.
 - `testScript` outputs exactly one boolean.
 - Elevation goes through `metadata: securityContext: elevated`.
-- The `dependsOn` form `[resourceId('<type>','<name>')]` is not verified yet.
+- `dependsOn` entries are plain unit names. winget 1.29 never finds the
+  `[resourceId('<type>','<name>')]` form from the DSC docs (verified with real
+  `winget configure` runs; `winget configure test` accepts anything).
 
 If a rule looks wrong, keep it and raise the doubt with the maintainer.
 

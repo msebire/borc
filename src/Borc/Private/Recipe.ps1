@@ -101,13 +101,35 @@ function Read-BorcRecipeResources {
       continue
     }
     $name = $resource['name']
-    if ($name.Contains("'")) { $Recipe.Errors.Add("recipe ${id}: resource name '$name' must not contain a single quote.") }
     if ($names.ContainsKey($name)) { $Recipe.Errors.Add("recipe ${id}: two resources are named '$name'.") }
     $names[$name] = $true
     Test-BorcResourcePlaceholders -Resource $resource -Recipe $Recipe
     $resource
   }
   $Recipe.Resources = @($resources)
+  foreach ($resource in $Recipe.Resources) { Test-BorcResourceDependsOn -Resource $resource -Names $names -Recipe $Recipe }
+}
+
+# dependsOn may only name units of the same recipe; other recipes are waited
+# for with requires, because borc renames every unit with its recipe prefix.
+function Test-BorcResourceDependsOn {
+  param([Parameter(Mandatory)] $Resource, [Parameter(Mandatory)] [hashtable] $Names, [Parameter(Mandatory)] $Recipe)
+  if (-not $Resource.Contains('dependsOn')) { return }
+  $id = $Recipe.Id
+  $name = $Resource['name']
+  $entries = $Resource['dependsOn']
+  if (-not (Test-BorcList $entries) -or @($entries | Where-Object { -not ($_ -is [string]) }).Count -gt 0) {
+    $Recipe.Errors.Add("recipe ${id}: dependsOn of resource '$name' must be a list of resource names.")
+    return
+  }
+  foreach ($entry in $entries) {
+    $target = ConvertFrom-WingetDependsOn -Value $entry
+    if ($target -eq $name) {
+      $Recipe.Errors.Add("recipe ${id}: resource '$name' depends on itself.")
+    } elseif (-not $Names.ContainsKey($target)) {
+      $Recipe.Errors.Add("recipe ${id}: resource '$name' depends on '$target', which is not a resource of this recipe. Use requires to wait for another recipe.")
+    }
+  }
 }
 
 # Placeholders are only allowed in input, and must be declared in the header.

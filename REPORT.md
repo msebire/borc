@@ -4,6 +4,81 @@ Latest report on top.
 
 ---
 
+## Step 11: dependsOn and requires fixed for winget 1.29 (2026-10-24)
+
+### Done
+
+- **Bug:** a recipe's own `dependsOn` made `borc apply` fail with "The
+  dependency `[resourceId(...)]` was not found within the configuration"
+  (exit code 0x8A15C007). `requires` between recipes generated the same
+  form, so it was broken too.
+- **Accepted form, found with real `winget configure` runs** (winget
+  1.29.380, DSC 3.2.2, Windows 10 22H2, PowerShell 7.6.8). Every unit was
+  harmless: Git.Git already installed, `testScript` returning `$true`, no
+  elevation.
+
+  | Case | `dependsOn` entry | Result |
+  | --- | --- | --- |
+  | A | `[resourceId('...PowerShellScript','first')]` | exit 0x8A15C007, "not found" |
+  | B | `first` | applied |
+  | C | `@local/x: first` | applied |
+  | D | `[resourceId('...','@local/x: first')]` | exit 0x8A15C007, "not found" |
+  | E | `git package` (Package target) | applied |
+  | F | `@local/x: git package` (Package target) | applied |
+  | G | `nothing-by-this-name` | exit 0x8A15C007, so names really are checked |
+  | H | `@local/x: first`, listed after its dependant | applied, `first` applied first |
+
+  winget's dscv3 path matches `dependsOn` entries against unit names as
+  plain text and orders the units itself. The `resourceId()` form never
+  works. borc's prefixed names (`@`, `/`, `:`, spaces) are fine.
+- **Fix:**
+  - `WingetRules.ps1`: `Format-WingetDependsOn` emits the plain name, and
+    `ConvertFrom-WingetDependsOn` reads the plain name or the `resourceId`
+    form. The comment records what was verified, and how.
+  - `Generator.ps1`: a recipe's own entries become the plain prefixed name;
+    `requires` adds the plain prefixed names of the required recipe's units.
+  - `Recipe.ps1`: new check errors for a `dependsOn` naming something that
+    is not a unit of the recipe (with a hint to use `requires`), a unit
+    depending on itself, and a `dependsOn` that is not a list. The "no `'`
+    in resource names" rule is gone: it only protected the `resourceId`
+    expression.
+- **End to end:** borc's own generator built a file from harmless `@local`
+  recipes (a Package target, a plain and a `resourceId` own `dependsOn`, and
+  `requires` across recipes listed in reverse order). A real
+  `winget configure` applied all four units in dependency order, exit code 0.
+- **Tests:**
+  - golden files regenerated;
+  - the plain and `resourceId` authoring forms;
+  - a new check that every emitted `dependsOn` names a unit of the same run;
+  - the new check errors.
+
+  195 tests pass.
+- **Docs:** `writing-recipes.md` gets a `dependsOn` rule in the verified
+  list, explains plain names and `requires`, and has a new error table. The
+  `depends-on` fragment and the `wsl-ubuntu` example now use the plain name.
+  `CLAUDE.md` is updated too.
+
+### Assumptions
+
+- Existing recipes keep working: a `resourceId` entry naming a unit of the
+  same recipe is turned into the plain name. Recipe authors do not have to
+  change anything, but the docs now recommend the plain name.
+
+### Questions
+
+- None.
+
+### Deviations
+
+- None.
+
+### To verify
+
+- Nothing new: item 9 of the fresh-machine checklist is now verified on
+  Windows 10 22H2. It still needs a Windows 11 run.
+
+---
+
 ## Step 10: readable output (2026-10-24)
 
 ### Done

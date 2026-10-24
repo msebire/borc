@@ -31,8 +31,8 @@ resources:
 - name: 'recipes/npm-auth: npm token'
   type: Microsoft.DSC.Transitional/PowerShellScript
   dependsOn:
-  - "[resourceId('Microsoft.WinGet/Package','recipes/node: node package')]"
-  - "[resourceId('Microsoft.DSC.Transitional/PowerShellScript','recipes/node: npm cache')]"
+  - 'recipes/node: node package'
+  - 'recipes/node: npm cache'
   properties:
     input: registry.example.com
     testScript: |
@@ -50,7 +50,7 @@ resources:
 - name: 'recipes/idea: idea config path'
   type: Microsoft.DSC.Transitional/PowerShellScript
   dependsOn:
-  - "[resourceId('Microsoft.WinGet/Package','recipes/idea: idea package')]"
+  - 'recipes/idea: idea package'
   properties:
     input: idea
     testScript: |

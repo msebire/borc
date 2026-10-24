@@ -79,7 +79,10 @@ Describe 'Recipe parsing' {
     @{ Case = 'a non-boolean reboot'; Body = "borc:`n  reboot: maybe"; Expected = 'reboot must be true or false' }
     @{ Case = 'an undeclared placeholder'; Body = "resources:`n  - name: a`n    type: T`n    properties:`n      input: '{{nope}}'"; Expected = 'uses {{nope}}, which the borc header does not declare' }
     @{ Case = 'a placeholder outside input'; Body = "borc:`n  parameters:`n    p: d`nresources:`n  - name: a`n    type: T`n    properties:`n      setScript: '{{p}}'"; Expected = 'outside input' }
-    @{ Case = 'a quote in a resource name'; Body = "resources:`n  - name: it's`n    type: T"; Expected = 'must not contain a single quote' }
+    @{ Case = 'a dependsOn on another recipe'; Body = "resources:`n  - name: a`n    type: T`n    dependsOn:`n      - 'recipes/node: node package'"; Expected = "depends on 'recipes/node: node package', which is not a resource of this recipe. Use requires" }
+    @{ Case = 'a dependsOn typo in the resourceId form'; Body = "resources:`n  - name: a`n    type: T`n  - name: b`n    type: T`n    dependsOn:`n      - `"[resourceId('T','aa')]`""; Expected = "depends on 'aa', which is not a resource of this recipe" }
+    @{ Case = 'a dependsOn that is not a list'; Body = "resources:`n  - name: a`n    type: T`n  - name: b`n    type: T`n    dependsOn: a"; Expected = 'must be a list of resource names' }
+    @{ Case = 'a unit that depends on itself'; Body = "resources:`n  - name: a`n    type: T`n    dependsOn: [a]"; Expected = "resource 'a' depends on itself" }
     @{ Case = 'two resources with one name'; Body = "resources:`n  - name: a`n    type: T`n  - name: a`n    type: T"; Expected = "two resources are named 'a'" }
   ) {
     $header = "`$schema: https://raw.githubusercontent.com/PowerShell/DSC/main/schemas/2023/08/config/document.json`nmetadata:`n  winget:`n    processor: dscv3`n"

@@ -6,8 +6,15 @@
 # param, testScript returning one boolean, and securityContext: elevated.
 # winget 1.29 rejects the aka.ms/dsc/schemas/v3/... URLs from the DSC docs.
 #
-# Not verified yet: the dependsOn form, the prefixed resource names inside it,
-# and the Microsoft.WinGet/Package properties borc uses for plain packages.
+# dependsOn, verified the same day with real winget configure runs (not
+# `winget configure test`, which accepts anything): winget's dscv3 path matches
+# each entry against unit names as plain text, and applies the named unit
+# first. The [resourceId('<type>','<name>')] form from the DSC docs is never
+# found, even with a simple name. borc's prefixed names (with @, /, : and
+# spaces) work, for PowerShellScript and Microsoft.WinGet/Package targets.
+# A Microsoft.WinGet/Package unit with id and source: winget applies too.
+#
+# Not verified yet: Microsoft.WinGet/Package with source: msstore.
 
 $script:WingetSchemaUrl = 'https://raw.githubusercontent.com/PowerShell/DSC/main/schemas/2023/08/config/document.json'
 $script:WingetProcessor = 'dscv3'
@@ -38,18 +45,18 @@ function Test-WingetDocumentHeader {
   ($Document['$schema'] -ceq $script:WingetSchemaUrl) -and ($processor -ceq $script:WingetProcessor)
 }
 
+# A dependsOn entry as winget resolves it: the unit name itself.
 function Format-WingetDependsOn {
-  param([Parameter(Mandatory)] [string] $Type, [Parameter(Mandatory)] [string] $Name)
-  "[resourceId('$Type','$Name')]"
+  param([Parameter(Mandatory)] [string] $Name)
+  $Name
 }
 
-# Reads back the type and name of a dependsOn entry, or $null when it has another form.
+# The unit name a recipe's dependsOn entry points at. Recipes may write the
+# plain name or, as the DSC docs show, [resourceId('<type>','<name>')].
 function ConvertFrom-WingetDependsOn {
   param([Parameter(Mandatory)] [string] $Value)
-  if ($Value -match "^\[resourceId\(\s*'([^']*)'\s*,\s*'([^']*)'\s*\)\]$") {
-    return [pscustomobject]@{ Type = $Matches[1]; Name = $Matches[2] }
-  }
-  $null
+  if ($Value -match "^\[resourceId\(\s*'([^']*)'\s*,\s*'([^']*)'\s*\)\]$") { return $Matches[2] }
+  $Value
 }
 
 function Format-WingetResourceName {

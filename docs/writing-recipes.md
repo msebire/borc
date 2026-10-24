@@ -80,16 +80,30 @@ on 2026-10-24 with winget 1.29.380, DSC 3.2.2 and Windows 10 22H2:
 - Apps are installed with `Microsoft.WinGet/Package` units (`id` and
   `source`). `borc upgrade` upgrades these, and `borc uninstall` lists them
   when the user removes the recipe.
+- `dependsOn` lists the **names** of the units to apply first. winget applies
+  them first even when they come later in the file. The
+  `[resourceId('<type>','<name>')]` form shown in the DSC documentation does
+  not work with winget: the dependency is reported as "not found within the
+  configuration". This was checked with real `winget configure` runs;
+  `winget configure test` accepts every form, so it cannot tell.
 
-Within a recipe, a unit can wait for another with `dependsOn`:
+Within a recipe, a unit can wait for another one by naming it in `dependsOn`:
 
 <!-- example: examples/fragments/depends-on.yaml -->
 ```yaml
     dependsOn:
-      - "[resourceId('Microsoft.DSC.Transitional/WindowsPowerShellScript','wsl features')]"
+      - wsl features
 ```
 
-Resource names must be unique within the recipe and must not contain `'`.
+- `dependsOn` may only name units of the same recipe. To wait for another
+  recipe, use `requires` in the borc header.
+- Write the names as they appear in the recipe; borc adds the recipe prefix
+  for you (see below).
+- borc also accepts `"[resourceId('<type>','<name>')]"` entries in existing
+  recipes and turns them into the plain name, but new recipes should use the
+  plain name.
+
+Resource names must be unique within the recipe.
 
 ## Idempotence and testScript
 
@@ -197,10 +211,12 @@ what it does helps when reading a log:
 - The borc header is stripped.
 - Every resource name gets its recipe as a prefix: `npm cache` in
   `recipes/node` becomes `recipes/node: npm cache`. `dependsOn` entries
-  inside the recipe are renamed to match.
+  inside the recipe are renamed to match: `- npm cache` becomes
+  `- 'recipes/node: npm cache'`.
 - `requires` becomes a `dependsOn` from every unit of the recipe to every
-  unit of the required recipes, and recipes are ordered so the required ones
-  come first.
+  unit of the required recipes, by their prefixed names, and recipes are
+  ordered so the required ones come first. A required recipe in the other run
+  (the reboot run) adds no `dependsOn`: it has already run.
 - Recipes marked `reboot: true` run first, in their own run. If Windows then
   needs a restart, `borc apply` stops and asks the user to restart and run it
   again.
@@ -323,7 +339,7 @@ resources:
   - name: ubuntu package
     type: Microsoft.WinGet/Package
     dependsOn:
-      - "[resourceId('Microsoft.DSC.Transitional/WindowsPowerShellScript','wsl features')]"
+      - wsl features
     properties:
       id: Canonical.Ubuntu.2404
       source: winget
@@ -350,6 +366,8 @@ recipe file start with `recipe <id>:`.
 | `resources must be a list.` | `resources` holds something other than a list. |
 | `every resource needs a name and a type.` | A unit without `name` or `type`. |
 | `two resources are named '<name>'.` | Names must be unique within the recipe. |
-| `resource name '<name>' must not contain a single quote.` | `'` would break the `dependsOn` expression. |
+| `dependsOn of resource '<name>' must be a list of resource names.` | `dependsOn` holds a single value or something other than text. |
+| `resource '<name>' depends on '<other>', which is not a resource of this recipe. Use requires to wait for another recipe.` | A typo in the name, or a unit of another recipe: use `requires` for that. |
+| `resource '<name>' depends on itself.` | Remove the entry. |
 | `resource '<name>' uses {{<p>}}, which the borc header does not declare under parameters.` | Declare the parameter, or fix the placeholder. |
 | `resource '<name>' uses {{<p>}} outside input. Placeholders only work in input.` | Move the value into `input`. |

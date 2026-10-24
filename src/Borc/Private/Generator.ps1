@@ -121,16 +121,16 @@ function Expand-BorcPlaceholders {
 
 # The recipe's own dependsOn entries, renamed to the prefixed names (entries on
 # dropped units are removed), followed by every kept unit of required recipes.
+# Recipe checks guarantee that every own entry names a unit of the recipe.
 function Get-BorcUnitDependsOn {
   param($Unit, [string] $RecipeId, [string[]] $OwnNames, [hashtable] $DroppedNames, [object[]] $RequiredUnits)
   foreach ($entry in @($Unit['dependsOn'] | Where-Object { $null -ne $_ })) {
-    $reference = ConvertFrom-WingetDependsOn -Value "$entry"
-    if ($null -eq $reference -or $reference.Name -notin $OwnNames) { "$entry"; continue }
-    if ($DroppedNames.ContainsKey($reference.Name)) { continue }
-    Format-WingetDependsOn -Type $reference.Type -Name (Format-WingetResourceName -RecipeId $RecipeId -Name $reference.Name)
+    $name = ConvertFrom-WingetDependsOn -Value "$entry"
+    if ($name -notin $OwnNames -or $DroppedNames.ContainsKey($name)) { continue }
+    Format-WingetDependsOn -Name (Format-WingetResourceName -RecipeId $RecipeId -Name $name)
   }
   foreach ($required in $RequiredUnits) {
-    Format-WingetDependsOn -Type $required.Type -Name $required.Name
+    Format-WingetDependsOn -Name $required.Name
   }
 }
 

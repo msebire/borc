@@ -54,7 +54,11 @@ machine.
 The DSC documentation gives `aka.ms/dsc/schemas/v3/...` schema URLs, and
 winget 1.29 rejects them. borc uses the rules verified on a real machine, and
 keeps them in one file (`src/Borc/WingetRules.ps1`) so a winget change means
-one edit. borc also refuses a recipe with another header, so a recipe that
+one edit. The same applies to `dependsOn`: the DSC documentation writes
+`[resourceId('<type>','<name>')]`, but winget resolves plain unit names
+itself, and `winget configure test` accepts both. Only real applies showed
+the difference, so rules are verified with `winget configure`, never with
+`test` alone. borc also refuses a recipe with another header, so a recipe that
 would fail in winget fails early, with a clear message.
 
 ### {{name}} placeholders in input, and dropped units

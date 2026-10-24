@@ -30,7 +30,7 @@ resources:
   - name: ubuntu package
     type: Microsoft.WinGet/Package
     dependsOn:
-      - "[resourceId('Microsoft.DSC.Transitional/WindowsPowerShellScript','wsl features')]"
+      - wsl features
     properties:
       id: Canonical.Ubuntu.2404
       source: winget

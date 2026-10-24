@@ -81,15 +81,26 @@ Describe 'Merged configuration' {
     $script:Runs.Dropped | Should -Be @("recipes/node: 'npm prefix' skipped, no value for npmPrefix")
   }
 
-  It 'turns requires into dependsOn on every kept unit of the required recipe' {
+  It 'turns requires into dependsOn on the plain names of every kept unit of the required recipe' {
     ($script:Runs.Main.resources | Where-Object name -EQ 'recipes/npm-auth: npm token').dependsOn | Should -Be @(
-      "[resourceId('Microsoft.WinGet/Package','recipes/node: node package')]",
-      "[resourceId('Microsoft.DSC.Transitional/PowerShellScript','recipes/node: npm cache')]")
+      'recipes/node: node package',
+      'recipes/node: npm cache')
   }
 
-  It "rewrites a recipe's own dependsOn to the prefixed names" {
+  It "turns a recipe's own resourceId entry into the plain prefixed name" {
     ($script:Runs.Main.resources | Where-Object name -EQ 'recipes/idea: idea config path').dependsOn | Should -Be @(
-      "[resourceId('Microsoft.WinGet/Package','recipes/idea: idea package')]")
+      'recipes/idea: idea package')
+  }
+
+  # winget resolves dependsOn by unit name within the file it runs; anything
+  # else fails at apply time with "not found within the configuration".
+  It 'only emits dependsOn entries that name a unit of the same run' {
+    foreach ($document in $script:Runs.Reboot, $script:Runs.Main) {
+      $names = @($document.resources | ForEach-Object { $_['name'] })
+      foreach ($unit in $document.resources) {
+        foreach ($entry in @($unit['dependsOn'] | Where-Object { $_ })) { $names | Should -Contain $entry }
+      }
+    }
   }
 
   It 'adds no dependsOn across runs, where run order already holds' {
@@ -144,6 +155,35 @@ resources:
       $units = @(ConvertTo-BorcRecipeUnits -Recipe $recipe -Parameters ([ordered]@{}) -Dropped $dropped)
       $units.Count | Should -Be 1
       $units[0].Contains('dependsOn') | Should -BeFalse
+    }
+  }
+
+  It 'prefixes a plain-name dependsOn, the form recipes should use' {
+    InModuleScope Borc {
+      $text = @'
+$schema: https://raw.githubusercontent.com/PowerShell/DSC/main/schemas/2023/08/config/document.json
+metadata:
+  winget:
+    processor: dscv3
+resources:
+  - name: sysinternals package
+    type: Microsoft.WinGet/Package
+    properties:
+      id: Microsoft.Sysinternals.Suite
+      source: winget
+  - name: start menu shortcuts
+    type: Microsoft.DSC.Transitional/PowerShellScript
+    dependsOn:
+      - sysinternals package
+    properties:
+      input: x
+'@
+      $recipe = ConvertTo-BorcRecipe -Text $text -Id '@local/sysinternals'
+      $recipe.Errors | Should -BeNullOrEmpty
+      $dropped = [System.Collections.Generic.List[string]]::new()
+      $units = @(ConvertTo-BorcRecipeUnits -Recipe $recipe -Parameters ([ordered]@{}) -Dropped $dropped)
+      $units[1]['dependsOn'] | Should -Be @('@local/sysinternals: sysinternals package')
+      $units[0]['name'] | Should -Be '@local/sysinternals: sysinternals package'
     }
   }
 
