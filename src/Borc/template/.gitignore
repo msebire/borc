@@ -1,0 +1,8 @@
+# Apps write their settings straight into this folder. Track only what
+# matters: ignore an app's folder, then re-include the parts worth keeping
+# with negation patterns. For example:
+#
+#   idea/*
+#   !idea/codestyles/
+#
+# Ignored files stay local and never block borc apply.

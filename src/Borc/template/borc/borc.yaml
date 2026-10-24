@@ -1,0 +1,24 @@
+# borc configuration for this machine.
+# Format: https://github.com/msebire/borc/blob/main/docs/borc-yaml.md
+
+# Recipe repos, named after their Git repo (or an alias).
+# recipes:
+#   - repo: https://github.com/someone/recipes.git
+
+apps:
+  - winget: Git.Git
+  - winget: Microsoft.PowerShell
+  - winget: Microsoft.WindowsTerminal
+  # A Microsoft Store app, by its Store ID:
+  # - msstore: 9NBLGGH4NNS1
+  # A recipe from a recipe repo, with an optional parameter:
+  # - recipe: recipes/node
+  #   parameters:
+  #     npmCache: D:\caches\npm
+  # A recipe of your own, in borc/cookbook/my-tool.yaml:
+  # - recipe: '@local/my-tool'
+
+# Secrets the recipes read. borc asks for each value once and stores it in
+# Windows Credential Manager.
+# secrets:
+#   NPM_TOKEN: token for the company npm registry
