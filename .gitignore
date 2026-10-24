@@ -14,7 +14,6 @@ coverage.xml
 
 # Build output
 out/
-build/
 dist/
 *.nupkg
 

@@ -1,0 +1,293 @@
+# borc engine v0.1: report
+
+Latest report on top.
+
+---
+
+## Step 1b: answers to the plan questions (2026-10-24)
+
+### Done
+
+- Recorded the maintainer's answers:
+  1. **Release model, as recommended.**
+     - `main` only holds released work. `develop` holds everything not yet
+       released: small changes go straight to it, bigger ones through
+       feature branches merged into it.
+     - A release adds the version number to the `[Unreleased]` section of
+       `CHANGELOG.md` on `develop`, then fast-forwards `main` to that
+       commit. The number is chosen at release time, never ahead.
+     - `main` stays the default branch on GitHub, so visitors see the
+       released docs and the one-liner.
+     - The one-liner downloads `install.ps1` from `main`, and install.ps1
+       clones the engine on `main` into `%LOCALAPPDATA%\borc\engine`.
+     - `self-update` runs `git pull --ff-only` on the branch the engine is
+       on.
+     - The `apply` notice compares the engine with the latest commit of that
+       branch (`git ls-remote`). It still skips silently when offline.
+     - Tags, if the maintainer creates them, are for communication only;
+       the app never reads them.
+  2. **`BORC_BRANCH` for trying unreleased work.** install.ps1 reads it from
+     its own process only and clones that branch, usually `develop`. The
+     engine clone then stays on it, and the normal one-liner switches it back
+     to `main`. The variable is never stored.
+  3. **PATH shim**: `%LOCALAPPDATA%\borc\bin\borc.cmd`, with that folder added
+     to the user `PATH`.
+  4. **Recipes dot-source** `$env:LOCALAPPDATA\borc\Get-BorcSecret.ps1`.
+  5. **Recipe files**: `<recipe>.yaml` at the repo root, the same in
+     `borc/cookbook/`, with an optional `description:` field in the borc
+     header.
+  6. **A `requires` target missing from `borc.yaml`** is an error.
+  7. **A reboot recipe requiring a normal recipe** is an error.
+  8. **Offline `apply`**: borc stops with Git's error.
+  9. **`--what-if`** lists every app and recipe after the pull and marks the
+     packages `winget list` already shows.
+  10. **Prefix form**: `recipes/idea: node cache`. Names containing `'` are
+      rejected.
+  11. **`uninstall` of an app not in `borc.yaml`** still runs
+      `winget uninstall` and says there was no line to remove.
+
+### Assumptions
+
+- The manifest keeps `ModuleVersion = '0.0.0'` until the first release; the
+  release commit sets it, together with the changelog section.
+- I create no tags.
+
+### Questions
+
+- None open.
+
+### Deviations
+
+- From the spec: "newest release tag" becomes "latest commit of `main`" in
+  the one-liner, `self-update` and the update notice. The design reason still
+  holds: unfinished work never reaches users, because it stays on `develop`
+  until it is released.
+
+### To verify
+
+- The engine clone is a plain `main` checkout. A `self-update` after a
+  force-push to `main` fails with Git's fast-forward error.
+
+---
+
+## Step 1: plan (2026-10-24)
+
+### Done
+
+- Created the branch `develop` from `main`. `main` only receives released
+  work.
+- Read the spec and checked the local tooling: pwsh 7.6.8, Pester 6.2.0,
+  PSScriptAnalyzer 1.25.0, powershell-yaml 0.4.12, winget 1.29.380, Git 2.55.
+  This machine runs Windows 10 22H2 (19045), so local runs will show the
+  Windows 10 warning.
+- Wrote this plan. No code yet.
+
+#### Files
+
+```
+install.ps1                     bootstrap, Windows PowerShell 5.1, standalone
+bin/borc.cmd                    command shim (see Q3)
+src/Borc/
+  Borc.psd1                     manifest; the version is set at release time
+  Borc.psm1                     loads the files below, exports Invoke-Borc
+  borc.ps1                      entry point: parses args, dispatches commands
+  Constants.ps1                 repo URL, release branch, folder names, credential prefix
+  WingetRules.ps1               $schema URL, processor, resource type names,
+                                dependsOn form, resource name prefix form
+  Private/
+    Config.ps1                  Read-BorcConfig, Test-BorcConfig (borc.yaml)
+    Recipe.ps1                  Resolve-BorcRecipe, Read-BorcRecipe (header split)
+    Generator.ps1               New-BorcConfiguration (merged + reboot run)
+    ConfigEdit.ps1              Add-BorcAppEntry, Remove-BorcAppEntry (text edits)
+    ProfileBlock.ps1            Get/Set-BorcProfileBlock
+    Git.ps1                     dirty check, pull --ff-only, fetch/what-if,
+                                clone, branch creation, starter template
+    Setup.ps1                   steps install.ps1 hands off to under pwsh 7
+    Secrets.ps1                 asks for missing secrets
+    Log.ps1                     Start-BorcLog, Write-BorcLog, log rotation
+    Reboot.ps1                  pending restart detection
+    Release.ps1                 update notice, self-update
+    Wrappers/
+      Winget.ps1                Invoke-BorcWinget (the only place calling winget)
+      CredentialStore.ps1       CredRead/CredWrite P/Invoke (prefix as parameter)
+      Environment.ps1           Get/Set-BorcEnvironmentVariable
+  Commands/                     one file per command: Apply, Upgrade, Install,
+                                Uninstall, Search, SelfUpdate, Help
+  help/                         one text page per command (source for borc help)
+  template/                     starter config repo
+  BorcSecret/                   Get-BorcSecret module, PS 5.1 and 7 (see Q4)
+build/test.ps1                  PSScriptAnalyzer + Pester, non-zero exit on failure
+tests/
+  *.Tests.ps1
+  fixtures/                     test recipes, borc.yaml files, golden files
+  manual/                       small test config repo with @local recipes
+docs/
+  getting-started.md  borc-yaml.md  writing-recipes.md  commands.md
+  troubleshooting.md  design.md
+  examples/                     every YAML shown in the docs, validated by tests
+CLAUDE.md  CHANGELOG.md  README.md
+```
+
+#### Main flow
+
+- **install.ps1** (5.1): forces process-scope `Bypass` and TLS 1.2, checks the
+  OS, installs `Microsoft.WinGet.Client` and runs
+  `Repair-WinGetPackageManager -Latest`, then installs or upgrades Git,
+  PowerShell 7 and `Microsoft.DSC` through winget and reloads `PATH` from the
+  registry. Next it clones the engine on `main` into
+  `%LOCALAPPDATA%\borc\engine`. It hands everything else to
+  `pwsh -File engine\src\Borc\Setup.ps1`: `powershell-yaml`, the prompts and
+  folder check, the config clone, template or branch, the environment
+  variables, the shim, the profile block, then `borc apply`. With this split,
+  most of the install logic lives in the module and can be tested.
+- **Generator**: it reads each recipe and splits off the `borc:` header. It
+  checks the WinGet header against the constants, substitutes `{{name}}` in
+  `input` (after parsing, so values cannot break the YAML), and drops units
+  that use a missing parameter. Names are prefixed and the recipe's own
+  `dependsOn` references are rewritten to the prefixed names. Every unit of a
+  recipe gets a `dependsOn` on every kept unit of the recipes it `requires`.
+  Recipes are sorted by `requires` (a cycle is an error). Plain `winget:` and
+  `msstore:` apps become `Microsoft.WinGet/Package` units in the main run. The
+  output is two documents, reboot run and main run, written with the header
+  from `WingetRules.ps1`.
+- **Text edits**: they find the top-level `apps:` block and append an item
+  using the existing item indentation. Removing an item takes its
+  continuation lines too (for example `parameters:`). The rest of the file is
+  left byte for byte.
+- **Get-BorcSecret**: C# `CredRead` through `Add-Type`, the same code on 5.1
+  and 7. The credential prefix is a parameter so tests use `borc-test:`.
+
+### Assumptions
+
+1. **The engine is a Git clone** on `main` in `%LOCALAPPDATA%\borc\engine`.
+   `self-update` runs `git pull --ff-only`. The update notice compares the
+   engine's commit with `git ls-remote` of its branch.
+2. **Versions are set at release time.** `CHANGELOG.md` keeps an
+   `[Unreleased]` section for everything on `develop`; the release commit
+   gives it a number and sets the manifest version to match.
+3. **Single URL constant**: `install.ps1` is downloaded alone, so it cannot
+   read `Constants.ps1`. It keeps a copy of the URL, and a test fails if that
+   copy, the one-liner in the README and docs, or any GitHub URL in the docs
+   differs from `Constants.ps1`.
+4. **`git pull --ff-only`** for the config repo, because a merge would create
+   a commit. On divergence borc shows Git's error and stops.
+5. **Dirty check**: `git status --porcelain --untracked-files=no`. Untracked
+   and ignored files never block.
+6. **Restart detection**: the usual registry keys (CBS `RebootPending`,
+   Windows Update `RebootRequired`, `PendingFileRenameOperations`), compared
+   before and after a run. A restart that was already pending does not stop
+   `apply`, otherwise it could loop. A restart needed after the reboot run
+   stops `apply` before the main run.
+7. **`--debug`**: one `winget configure` run per recipe in `requires` order,
+   then one run for the plain packages. It stops at the first failure and
+   names the recipe. Each run may show its own UAC prompt.
+8. **Rerunning install.ps1** when `BORC_SETTINGS` is already a Git repo
+   skips the URL and branch prompts and reuses the clone. A local repo with
+   no remote (from an empty URL) counts as "the same repo".
+9. **Starter template**: `borc.yaml` with `Git.Git`,
+   `Microsoft.PowerShell` and `Microsoft.WindowsTerminal`, plus commented
+   recipe, parameter, `@local` and secret examples. `.gitkeep` files keep the
+   empty `scripts/` and `cookbook/` folders.
+10. **Validation errors** are reported together before anything runs. Beyond
+    the spec's checks, they cover: an unknown recipe repo or alias, a missing
+    recipe file, a recipe whose WinGet header differs from the verified one,
+    a `{{name}}` placeholder not declared in the header, a `requires` cycle,
+    an apps entry that is not exactly one of `winget`/`msstore`/`recipe`, and
+    a parameter value that is not a quoted string or plain scalar text.
+11. **Logs**: every command except `help` writes a log. The generated
+    configuration files (no secrets in them) are saved next to the log for
+    debugging and rotated with it.
+12. **The profile block** reads `$env:BORC_SETTINGS` and `$env:BORC_HOME` at
+    shell start instead of hardcoding paths, so moving a folder by hand only
+    means changing the variable. It uses a `foreach` statement (not
+    `ForEach-Object`) so dot-sourced functions land in the global scope.
+13. **`install` with a recipe** validates first, runs the recipe, and adds
+    the line only if the run succeeded. The same applies to winget and Store
+    apps.
+14. **`.gitignore` ignores `build/`**, which would hide `build/test.ps1`. I
+    will remove that line.
+
+### Questions
+
+My recommendation comes first in each. Answer "defaults" to take all of
+them.
+
+1. **Release model.** The spec moves the engine to "the newest release tag",
+   which means knowing the version before releasing and resolving tags in
+   the one-liner. Recommended instead:
+   - `main` only holds released work, and `develop` everything not yet
+     released, directly or through feature branches;
+   - a release numbers the changelog's `[Unreleased]` section on `develop`,
+     then fast-forwards `main` to that commit;
+   - the one-liner, the engine clone and `self-update` follow `main`.
+
+   The alternative is tags as in the spec, with a GitHub API call or a
+   release asset to find the newest one.
+2. **Trying unreleased work on a machine.** Recommended: install.ps1 reads a
+   `BORC_BRANCH` variable from its own process only, never stored, and clones
+   that branch (usually `develop`). The engine then follows it until the
+   normal one-liner brings it back to `main`. The alternative is a hidden
+   `-Ref` parameter.
+3. **How `borc` becomes a command.** (a) Add `%LOCALAPPDATA%\borc\bin` (with
+   `borc.cmd`, which runs `pwsh -NoProfile -ExecutionPolicy Bypass -File ...`)
+   to the user `PATH`. This works in any shell, but it is a persistent change
+   the spec does not list (recommended). (b) A `borc` function in the
+   profile block, which only works in PowerShell 7.
+4. **How a recipe script reaches `Get-BorcSecret`.** Scripts run in a fresh
+   process. (a) The recipe dot-sources it:
+   `. "$env:LOCALAPPDATA\borc\Get-BorcSecret.ps1"`. This changes nothing on
+   the machine (recommended). (b) borc adds a modules folder to the user
+   `PSModulePath`, so the function autoloads under 5.1 and 7.
+5. **Where a recipe lives in its repo, and its description** (for `search`).
+   Recommended: `<recipe>.yaml` at the repo root (`recipes/idea` means
+   `idea.yaml` in the repo `recipes`), the same in `borc/cookbook/`, and the
+   description is a new optional `description:` field in the borc header.
+   The alternative is the first comment line.
+6. **`requires` naming a recipe that `borc.yaml` does not list.** Recommended:
+   an error before anything runs. The alternative is adding it to the run
+   silently.
+7. **`requires` across runs.** A normal recipe requiring a `reboot: true`
+   recipe works by run order, and borc emits no `dependsOn` for it. A
+   `reboot: true` recipe requiring a normal one: recommended error.
+8. **Offline `apply`.** If the config repo cannot be fetched: (a) stop with
+   Git's error (recommended; matches "trust the tools"), or (b) warn and
+   apply the local copy.
+9. **`--what-if` "which apps would be installed".** Recommended: read
+   `borc.yaml` and the recipes as they would be after the pull, list every
+   app and recipe, and mark winget and Store packages that `winget list`
+   already shows. Recipe state is not checked, because
+   `winget configure test` may itself need UAC.
+10. **Resource name prefix.** Recommended `recipes/idea: node cache`. Names
+    containing `'` are rejected because they would break the `resourceId`
+    expression. The form is one constant, so it is easy to change if DSC
+    dislikes `/` or `:` (see To verify).
+11. **`uninstall` of an app that is not in `borc.yaml`.** Recommended: still
+    run `winget uninstall` and say there was no line to remove. The
+    alternative is refusing.
+
+### Deviations
+
+- None in behaviour. Structure only: install.ps1 clones the engine before
+  the remaining steps, so the module can run them under pwsh 7. The spec
+  lists the command install later, but all of these steps still happen
+  before `borc apply`.
+
+### To verify
+
+- The `dependsOn` form
+  `[resourceId('<type>','<name>')]` with the 2023/08 schema and DSC 3.2.2.
+- The prefixed resource names (`/`, `:` and spaces) inside `resourceId`.
+- The `Microsoft.WinGet/Package` resource and its properties (`id`,
+  `source: msstore`) under `processor: dscv3`.
+- The flags borc passes to `winget configure` (`--accept-configuration-agreements`,
+  `--disable-interactivity`) and how the exit code reports a failed unit.
+- One UAC prompt for a merged run with several elevated units.
+- `Get-BorcSecret` from an elevated unit. This works when the same account
+  elevates, but not when a standard user enters another admin account,
+  because Credential Manager is per user.
+- `BORC_SETTINGS` and `BORC_HOME` are visible inside elevated units.
+- `Repair-WinGetPackageManager -Latest` without admin rights, and
+  `Install-Module` with the PowerShellGet 1.0 that ships with 5.1.
+- Restart detection from the registry after a WSL or Virtual Machine Platform recipe.
+- The pwsh 7 default execution policy lets the profile block load
+  `borc/scripts/` on a fresh machine.
