@@ -1,5 +1,5 @@
 ﻿$ErrorActionPreference = 'Stop'
-Set-StrictMode -Version 3.0
+Set-StrictMode -Version 1.0
 
 $sourceFiles = @(
   Get-Item -Path (Join-Path $PSScriptRoot 'Constants.ps1'), (Join-Path $PSScriptRoot 'WingetRules.ps1'), (Join-Path $PSScriptRoot 'Get-BorcSecret.ps1')

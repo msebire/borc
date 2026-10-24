@@ -1,0 +1,15 @@
+# Test fixture: uses every feature.
+recipes:
+  - repo: https://github.com/someone/recipes.git
+apps:
+  - winget: Git.Git
+  - msstore: 9NBLGGH4NNS1
+  - recipe: recipes/npm-auth
+  - recipe: recipes/node
+    parameters:
+      npmCache: D:\caches\npm
+  - recipe: recipes/idea
+  - recipe: '@local/wsl-ubuntu'
+  - recipe: recipes/wsl
+secrets:
+  NPM_TOKEN: token for the company npm registry

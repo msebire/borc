@@ -4,6 +4,75 @@ Latest report on top.
 
 ---
 
+## Step 3: borc.yaml and recipe parsing (2026-10-24)
+
+### Done
+
+- `Config.ps1` reads `borc.yaml`, `Recipe.ps1` reads a recipe (borc header,
+  WinGet header check, resources, placeholders), and `Plan.ps1` checks them
+  against each other and orders recipes by `requires`.
+- All problems are collected and reported together.
+- Fixtures under `tests/fixtures/` cover parameters, secrets, `reboot`,
+  `requires`, elevation and `@local`.
+- 39 tests pass.
+
+### Assumptions
+
+- Parameter names match case-insensitively (`npmcache` sets `npmCache`), as
+  PowerShell does elsewhere.
+- Extra validation errors beyond the spec: a duplicate apps entry, a
+  placeholder outside `input`, a resource name containing `'`, two resources
+  sharing a name, and unknown keys in `borc.yaml`, the borc header or the
+  recipe top level.
+
+### Questions
+
+- None.
+
+### Deviations
+
+- None.
+
+### To verify
+
+- Nothing new.
+
+---
+
+## Step 2: CLAUDE.md and skeleton (2026-10-24)
+
+### Done
+
+- Added `CLAUDE.md` with the hard rules and the test safety rules, pointing
+  to `docs/design.md`.
+- Added the module skeleton, `Constants.ps1` (the one URL constant),
+  `WingetRules.ps1` (every WinGet format rule), the thin wrappers, logging,
+  `Get-BorcSecret.ps1` and `build/test.ps1`.
+- Removed `build/` from `.gitignore`.
+
+### Assumptions
+
+- Strict mode is level 1 in the module (uninitialised variables only): higher
+  levels throw on `.Count` of a single value and on missing YAML keys.
+- The one-liner is
+  `powershell -NoProfile -ExecutionPolicy Bypass -Command "irm <raw main>/install.ps1 | iex"`.
+  It always starts Windows PowerShell 5.1, and `Bypass` applies to that
+  process only.
+
+### Questions
+
+- None.
+
+### Deviations
+
+- None.
+
+### To verify
+
+- Nothing new.
+
+---
+
 ## Step 1b: answers to the plan questions (2026-10-24)
 
 ### Done

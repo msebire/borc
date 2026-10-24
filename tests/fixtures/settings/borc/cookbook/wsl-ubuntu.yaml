@@ -1,0 +1,15 @@
+# Test fixture, not a real recipe.
+# Layout under BORC_SETTINGS: none.
+borc:
+  description: Ubuntu on WSL
+  requires: [recipes/wsl]
+$schema: https://raw.githubusercontent.com/PowerShell/DSC/main/schemas/2023/08/config/document.json
+metadata:
+  winget:
+    processor: dscv3
+resources:
+  - name: ubuntu package
+    type: Microsoft.WinGet/Package
+    properties:
+      id: Canonical.Ubuntu.2404
+      source: winget
