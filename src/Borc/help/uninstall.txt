@@ -1,0 +1,16 @@
+Usage: borc uninstall <app>
+
+Uninstalls an app and removes it from the apps list of borc.yaml. The
+argument is read by its form, as for borc install.
+
+  winget or Store app  Runs winget uninstall, then removes its line. An app
+                       borc.yaml does not list is still uninstalled.
+  recipe               Only removes its line, then lists the winget packages
+                       the recipe installed so you can remove them with
+                       borc uninstall <id>. borc does not undo a recipe.
+
+The change to borc.yaml keeps its comments and formatting, and is left
+uncommitted for you to review.
+
+Options:
+  -h, --help  Show this page.

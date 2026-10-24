@@ -1,0 +1,9 @@
+Usage: borc self-update
+
+Updates borc in %LOCALAPPDATA%\borc to the latest version, then refreshes
+the borc block in your PowerShell 7 profile: only the text between its
+markers, and only when it changed. It never touches the config repo or
+installed apps. borc apply only prints a notice when an update exists.
+
+Options:
+  -h, --help  Show this page.

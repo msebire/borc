@@ -1,0 +1,4 @@
+Usage: borc help [<command>]
+
+Without a command, lists the borc commands. With a command, shows its page.
+borc <command> --help and borc <command> -h show the same page.

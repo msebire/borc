@@ -1,0 +1,9 @@
+Usage: borc upgrade
+
+Upgrades, through winget, the apps borc.yaml lists: the plain winget and
+Store IDs, and the winget packages of the listed recipes. Apps borc.yaml does
+not list are never touched, and neither are settings. An app that is not
+installed yet is skipped; borc apply installs it.
+
+Options:
+  -h, --help  Show this page.

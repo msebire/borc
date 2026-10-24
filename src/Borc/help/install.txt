@@ -1,0 +1,18 @@
+Usage: borc install <app>
+
+Installs an app and adds it to the apps list of borc.yaml. The argument is
+read by its form:
+
+  repo/recipe or @local/<name>   a recipe
+  no dot, such as 9NBLGGH4NNS1   a Microsoft Store ID
+  anything else, such as Git.Git a winget ID, checked to exist first
+
+An app already listed is only installed if it is missing. A recipe is checked
+first (parameters, secrets, requires), then run; set its parameters by
+editing borc.yaml.
+
+The change to borc.yaml keeps its comments and formatting, and is left
+uncommitted for you to review.
+
+Options:
+  -h, --help  Show this page.

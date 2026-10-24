@@ -1,0 +1,15 @@
+borc turns a blank Windows machine into a working developer workstation.
+
+Usage: borc <command> [options]
+
+Commands:
+  help [<command>]   List the commands, or show the page of one command
+  apply              Pull and apply the configuration
+  upgrade            Upgrade the apps borc.yaml lists, through winget
+  install <app>      Install an app and add it to borc.yaml
+  uninstall <app>    Uninstall an app and remove it from borc.yaml
+  search <term>      Search recipes and winget packages
+  self-update        Update borc itself to the latest version
+
+Run borc help <command>, borc <command> --help or borc <command> -h for
+the page of one command.

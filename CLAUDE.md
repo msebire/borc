@@ -52,7 +52,8 @@ Other rules:
   released. Commit small changes straight to `develop`; bigger ones go through a
   feature branch merged into it. Never push or merge into `main` unless the
   maintainer asks: a release fast-forwards `main` to a commit of `develop`.
-  Never write a version number ahead of the release.
+  Never write a version number ahead of the release. Try a branch on a real
+  machine with `BORC_BRANCH` (see the README); never store that variable.
 - Keep the code readable: small functions, comments only where the intent is not obvious.
 
 ## Test safety rules

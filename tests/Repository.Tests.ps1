@@ -38,8 +38,10 @@ Describe 'Repository conventions' {
 }
 
 Describe 'Module' {
-  It 'imports and exports Get-BorcSecret' {
+  It 'imports and exports the borc entry points' {
     $commands = (Get-Module -Name Borc).ExportedFunctions.Keys
+    $commands | Should -Contain 'Invoke-Borc'
+    $commands | Should -Contain 'Invoke-BorcSetup'
     $commands | Should -Contain 'Get-BorcSecret'
   }
 

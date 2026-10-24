@@ -1,6 +1,8 @@
 ﻿# The engine repository. This is the only place the URL is defined; install.ps1
 # keeps a copy (it is downloaded alone) and the tests check that they match.
 $script:BorcRepoUrl = 'https://github.com/msebire/borc'
+# The release branch. A maintainer can install another one with BORC_BRANCH
+# (see install.ps1); the engine clone then stays on it.
 $script:BorcBranch = 'main'
 
 $script:BorcCredentialPrefix = 'borc:'

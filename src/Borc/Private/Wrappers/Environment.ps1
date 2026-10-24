@@ -12,6 +12,18 @@ function Set-BorcUserEnvironmentVariable {
   [Environment]::SetEnvironmentVariable($Name, $Value, 'Process')
 }
 
+# The user PATH is read and written through the registry so entries such as
+# %USERPROFILE%\bin stay unexpanded (REG_EXPAND_SZ).
+function Get-BorcUserPath {
+  $key = Get-Item -LiteralPath 'HKCU:\Environment'
+  $key.GetValue('Path', '', 'DoNotExpandEnvironmentNames')
+}
+
+function Set-BorcUserPath {
+  param([Parameter(Mandatory)] [string] $Value)
+  Set-ItemProperty -LiteralPath 'HKCU:\Environment' -Name 'Path' -Value $Value -Type ExpandString
+}
+
 function Read-BorcInput {
   param([Parameter(Mandatory)] [string] $Prompt)
   Read-Host -Prompt $Prompt

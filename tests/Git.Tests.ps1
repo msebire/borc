@@ -4,7 +4,7 @@
 
   function Invoke-TestGit {
     # Plain $args: an advanced function would read -C as one of its own parameters.
-    $output = & git -c user.name=borc-test -c user.email=borc-test@example.invalid -c init.defaultBranch=main @args 2>&1
+    $output = & git -c user.name=borc-test -c user.email=borc-test@example.invalid -c init.defaultBranch=main -c core.autocrlf=false @args 2>&1
     if ($LASTEXITCODE -ne 0) { throw "git $args failed: $output" }
   }
 
@@ -119,6 +119,18 @@ Describe 'Creating BORC_SETTINGS' {
     git -C $script:Settings symbolic-ref --short HEAD | Should -Be 'home'
     git -C $script:Settings rev-parse --verify --quiet HEAD | Should -BeNullOrEmpty
     git ls-remote --heads $remote | Should -BeNullOrEmpty
+  }
+
+  It 'asks for the URL, the branch and the base branch during setup' {
+    $remote = New-TestRemote -Root $script:Root -Branches @('work')
+    InModuleScope Borc -Parameters @{ S = $script:Settings; U = $remote } {
+      param($S, $U)
+      Mock Write-Host {}
+      $script:Answers = [System.Collections.Generic.Queue[string]]::new([string[]]@($U, 'laptop', '1'))
+      Mock Read-BorcInput { $script:Answers.Dequeue() }
+      Initialize-BorcSettingsInteractive -Path $S
+    }
+    git -C $script:Settings symbolic-ref --short HEAD | Should -Be 'laptop'
   }
 
   It 'leaves a clone of the same repo as it is' {

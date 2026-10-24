@@ -1,0 +1,33 @@
+Usage: borc apply [--what-if] [--debug]
+
+Pulls the config repo and the recipe repos, then applies borc.yaml.
+
+  1. Refuses to pull while tracked files in BORC_SETTINGS have uncommitted
+     changes. Commit or discard them, then run borc apply again. Untracked
+     and ignored files never block.
+  2. Pulls the config repo and the recipe repos, and prints a notice when a
+     newer borc exists (skipped silently when offline).
+  3. Checks borc.yaml and every listed recipe, and reports all problems
+     before anything runs.
+  4. Asks once for each secret declared in borc.yaml that Windows Credential
+     Manager does not hold yet.
+  5. Runs the recipes marked reboot: true first, then one merged
+     configuration with the other recipes and the plain packages.
+  6. If Windows needs a restart, asks you to restart and run borc apply
+     again.
+
+winget's output and errors are shown as they come. borc adds no retry or
+skip logic of its own.
+
+Options:
+  --what-if   Fetch without merging, then show what the pull would bring,
+              which apps and recipes would be installed and which secrets
+              would be asked for. Changes nothing.
+  --debug     Run the recipes one at a time, to find the one that fails.
+              Each run may show its own UAC prompt.
+  -h, --help  Show this page.
+
+Exit codes:
+  0     Done.
+  1     A check failed or winget reported a failure.
+  3010  Windows needs a restart; restart and run borc apply again.

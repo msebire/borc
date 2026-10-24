@@ -84,7 +84,7 @@ function Sync-BorcRecipeRepo {
 # Fetches without merging and returns what a pull would bring.
 function Get-BorcIncoming {
   param([Parameter(Mandatory)] [string] $Path)
-  if (-not (Get-BorcUpstream -Path $Path)) { return [pscustomobject]@{ Ref = 'HEAD'; Commits = @(); Files = @() } }
+  if (-not (Get-BorcUpstream -Path $Path)) { return [pscustomobject]@{ Ref = $null; Commits = @(); Files = @() } }
   Assert-BorcGit -Result (Invoke-BorcGit -Arguments @('-C', $Path, 'fetch') -Quiet) -Action "fetch $Path"
   $commits = Invoke-BorcGit -Arguments @('-C', $Path, 'log', '--oneline', 'HEAD..@{u}') -Quiet
   $files = Invoke-BorcGit -Arguments @('-C', $Path, 'diff', '--stat', 'HEAD...@{u}') -Quiet
@@ -137,7 +137,7 @@ function Initialize-BorcSettings {
     [Parameter(Mandatory)] [string] $Path,
     [AllowEmptyString()] [string] $Url = '',
     [Parameter(Mandatory)] [string] $Branch,
-    # Receives the remote branches and returns the one to start from, or $null.
+    # Receives the remote branches and the wanted branch, and returns the branch to start from, or $null.
     [Parameter(Mandatory)] [scriptblock] $ChooseBase
   )
   $state = Get-BorcSettingsFolderState -Path $Path -Url $Url
@@ -163,7 +163,7 @@ function Initialize-BorcSettings {
     Assert-BorcGit -Result (Invoke-BorcGit -Arguments @('clone', '--branch', $Branch, $Url, $Path)) -Action "clone $Url"
     return
   }
-  $base = & $ChooseBase $branches
+  $base = & $ChooseBase $branches $Branch
   if (-not $base) { throw "The branch $Branch does not exist on $Url and no branch was chosen to create it from." }
   Assert-BorcGit -Result (Invoke-BorcGit -Arguments @('clone', '--branch', $base, $Url, $Path)) -Action "clone $Url"
   Assert-BorcGit -Result (Invoke-BorcGit -Arguments @('-C', $Path, 'switch', '--no-track', '--create', $Branch) -Quiet) -Action "create the branch $Branch"

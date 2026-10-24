@@ -4,6 +4,134 @@ Latest report on top.
 
 ---
 
+## Step 7: commands, entry points and install.ps1 (2026-10-24)
+
+### Done
+
+- `Invoke-Borc` reads the arguments and runs `help`, `apply` (`--what-if`,
+  `--debug`), `upgrade`, `install`, `uninstall`, `search` and `self-update`.
+  `borc help`, `borc help <command>`, `--help` and `-h` show the pages in
+  `src/Borc/help/`.
+- `src/borc.cmd` (copied to `%LOCALAPPDATA%\borc\bin`, added to the user
+  `PATH`) runs `src/borc.ps1` from the engine clone.
+- `install.ps1` (Windows PowerShell 5.1) runs these steps, then
+  `src/setup.ps1` (pwsh 7) runs `Invoke-BorcSetup`:
+  - process-only `Bypass` and TLS 1.2;
+  - the OS check;
+  - `Microsoft.WinGet.Client` and `Repair-WinGetPackageManager -Latest`;
+  - Git, PowerShell 7 and `Microsoft.DSC` through winget;
+  - the engine clone on `main`, or on the branch `BORC_BRANCH` names for
+    maintainer testing (never stored; rerunning without it goes back to
+    `main`).
+- The command tests mock winget and Credential Manager. They run on
+  temporary Git repos and check:
+  - the run order;
+  - the restart stop (exit code 3010);
+  - a failure exiting 1;
+  - the secret prompt;
+  - plan errors stopping everything before any run;
+  - the dirty working copy refusal;
+  - `--debug` naming the failing recipe;
+  - `--what-if` changing nothing;
+  - the `install`, `uninstall`, `upgrade` and `search` behaviour;
+  - cloning, updating and leaving a `BORC_BRANCH` engine, and the update
+    notice following the engine's branch.
+- A Windows PowerShell 5.1 process checks that `install.ps1` parses.
+- After a full run, nothing exists in `%LOCALAPPDATA%\borc`, neither
+  `BORC_SETTINGS` nor the user `PATH` changed, and no `borc-test:`
+  credential is left.
+- 158 tests pass.
+
+### Assumptions
+
+- **Exit codes**: 0 done, 1 failed, 2 usage error, 3010 restart needed
+  (the Windows code for "success, restart required").
+- **`install` of a recipe** clones its repo if missing, checks the plan with
+  the recipe added, asks only for that recipe's missing secrets, runs it on
+  its own, then adds the line.
+- **`install` of a winget ID** checks `winget show` only when the ID is not
+  listed yet.
+- **`uninstall` of a recipe** that `borc.yaml` does not list is an error (exit
+  code 1).
+- **`--what-if` with a dirty working copy** warns and continues, since it
+  pulls nothing.
+- **Recipe repos missing from disk** are reported by `--what-if` as "not
+  cloned yet", and their recipes are not checked.
+- **Restart detection** reads the CBS `RebootPending` and Windows Update
+  `RebootRequired` keys only. `PendingFileRenameOperations` is skipped,
+  because ordinary installers set it all the time.
+- **Setup creates `BORC_HOME`** when it does not exist.
+- **`self-update` hands over to the updated engine** in a child process,
+  which copies `borc.cmd` and `Get-BorcSecret.ps1` again and rewrites the
+  profile block between its markers when it changed. A change to any of them
+  reaches users with the next update.
+- **A config branch with no upstream** (starter template, new branch) is
+  applied from the local copy, with a hint to push it.
+- **The user `PATH`** is read and written through the registry
+  (`REG_EXPAND_SZ`), so unexpanded entries survive.
+
+### Questions
+
+- None.
+
+### Deviations
+
+- None.
+
+### To verify
+
+- The winget exit codes `0x8A15002B` (no applicable upgrade), `0x8A150014`
+  (no package found) and `0x8A150061` (already installed).
+- `borc.cmd` with LF line endings (forced by `.gitattributes`) under cmd.exe.
+- `Install-Module -Force` under the PowerShellGet 1.0 that ships with 5.1,
+  without a prompt.
+- `winget configure --disable-interactivity` still shows the UAC prompt.
+
+---
+
+## Step 6: Git operations, template, secrets, logs (2026-10-24)
+
+### Done
+
+- `Git.ps1` covers:
+  - the dirty working copy refusal;
+  - `pull --ff-only`;
+  - fetching without merging;
+  - reading a file at a ref;
+  - the `BORC_SETTINGS` folder check;
+  - creating the settings folder (empty URL, empty remote, existing or
+    missing branch).
+- The starter template is in `src/Borc/template/`.
+- Secrets are asked for once and stored as `borc:<NAME>`; only names reach
+  the log.
+- Logs rotate at 20, together with the generated files of their run.
+- The Git tests run on temporary bare remotes. The Credential Manager tests
+  use `borc-test:` and clean up; a Windows PowerShell 5.1 process reads the
+  secret back.
+
+### Assumptions
+
+- In the starter `.gitignore`, the negation patterns are a commented
+  example, because an active `idea/*` would affect people who have no idea
+  folder.
+- `.gitkeep` files keep the empty `scripts/` and `cookbook/` folders.
+- A new branch made from another one has no upstream until the user pushes
+  it.
+
+### Questions
+
+- None.
+
+### Deviations
+
+- None.
+
+### To verify
+
+- Nothing new.
+
+---
+
 ## Step 5: borc.yaml text edits and profile block (2026-10-24)
 
 ### Done
