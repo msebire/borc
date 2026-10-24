@@ -1,0 +1,17 @@
+$schema: https://raw.githubusercontent.com/PowerShell/DSC/main/schemas/2023/08/config/document.json
+metadata:
+  winget:
+    processor: dscv3
+resources:
+- name: 'recipes/wsl: wsl feature'
+  type: Microsoft.DSC.Transitional/WindowsPowerShellScript
+  metadata:
+    securityContext: elevated
+  properties:
+    input: Microsoft-Windows-Subsystem-Linux
+    testScript: |
+      param($feature)
+      (Get-WindowsOptionalFeature -Online -FeatureName $feature).State -eq 'Enabled'
+    setScript: |
+      param($feature)
+      Enable-WindowsOptionalFeature -Online -FeatureName $feature -NoRestart | Out-Null

@@ -1,0 +1,66 @@
+$schema: https://raw.githubusercontent.com/PowerShell/DSC/main/schemas/2023/08/config/document.json
+metadata:
+  winget:
+    processor: dscv3
+resources:
+- name: 'winget: Git.Git'
+  type: Microsoft.WinGet/Package
+  properties:
+    id: Git.Git
+    source: winget
+- name: 'msstore: 9NBLGGH4NNS1'
+  type: Microsoft.WinGet/Package
+  properties:
+    id: 9NBLGGH4NNS1
+    source: msstore
+- name: 'recipes/node: node package'
+  type: Microsoft.WinGet/Package
+  properties:
+    id: OpenJS.NodeJS.LTS
+    source: winget
+- name: 'recipes/node: npm cache'
+  type: Microsoft.DSC.Transitional/PowerShellScript
+  properties:
+    input: D:\caches\npm
+    testScript: |
+      param($path)
+      (npm config get cache) -eq $path
+    setScript: |
+      param($path)
+      npm config set cache $path
+- name: 'recipes/npm-auth: npm token'
+  type: Microsoft.DSC.Transitional/PowerShellScript
+  dependsOn:
+  - "[resourceId('Microsoft.WinGet/Package','recipes/node: node package')]"
+  - "[resourceId('Microsoft.DSC.Transitional/PowerShellScript','recipes/node: npm cache')]"
+  properties:
+    input: registry.example.com
+    testScript: |
+      param($registry)
+      [bool](npm config get "//${registry}/:_authToken")
+    setScript: |
+      param($registry)
+      . "$env:LOCALAPPDATA\borc\Get-BorcSecret.ps1"
+      npm config set "//${registry}/:_authToken" (Get-BorcSecret NPM_TOKEN)
+- name: 'recipes/idea: idea package'
+  type: Microsoft.WinGet/Package
+  properties:
+    id: JetBrains.IntelliJIDEA.Community
+    source: winget
+- name: 'recipes/idea: idea config path'
+  type: Microsoft.DSC.Transitional/PowerShellScript
+  dependsOn:
+  - "[resourceId('Microsoft.WinGet/Package','recipes/idea: idea package')]"
+  properties:
+    input: idea
+    testScript: |
+      param($folder)
+      $env:IDEA_PROPERTIES -eq (Join-Path $env:BORC_SETTINGS "$folder\idea.properties")
+    setScript: |
+      param($folder)
+      [Environment]::SetEnvironmentVariable('IDEA_PROPERTIES', (Join-Path $env:BORC_SETTINGS "$folder\idea.properties"), 'User')
+- name: '@local/wsl-ubuntu: ubuntu package'
+  type: Microsoft.WinGet/Package
+  properties:
+    id: Canonical.Ubuntu.2404
+    source: winget
