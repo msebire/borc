@@ -140,7 +140,8 @@ function gl { git log --oneline --graph -20 @args }
 A script that fails prints one warning naming the file; the others still
 load. borc never runs these scripts itself. The installer adds a marked block
 to your PowerShell 7 profile to load them, and `borc self-update` keeps that
-block up to date; the rest of your profile is left alone.
+block up to date; the rest of your profile is left alone. The same block turns
+on Tab completion for `borc` (see [commands](commands.md#tab-completion)).
 
 ## The daily workflow
 

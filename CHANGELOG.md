@@ -40,6 +40,8 @@ The version number is chosen when the release is cut.
   says what was checked, and counts the verdicts. `--what-if --check` also
   tests every recipe unit with `winget configure test`, for a definite
   verdict per recipe.
+- Tab completion for `borc` in PowerShell 7: commands, options, recipes, the
+  apps `borc.yaml` lists, and winget IDs.
 - Readable output: numbered steps separated by blank lines, a start and an
   end line around every `git` and `winget` command, a summary with each
   step's result and duration, and colours (`NO_COLOR` turns them off), in

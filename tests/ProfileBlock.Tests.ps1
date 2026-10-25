@@ -61,27 +61,34 @@ Describe 'Profile block behaviour' {
     Set-Content -Path (Join-Path $script:Scripts 'b.ps1') -Value 'throw "broken"'
     Set-Content -Path (Join-Path $script:Scripts 'c.ps1') -Value 'function Get-BorcTestC { "c" }'
     Set-Content -Path (Join-Path $script:Folder 'profile.ps1') -Value $script:Block
+    # The block loads completion from the engine clone in LOCALAPPDATA.
+    $engineSrc = Join-Path $script:Folder 'localappdata\borc\engine\src'
+    New-Item -ItemType Directory -Path $engineSrc -Force | Out-Null
+    Copy-Item -LiteralPath (Join-Path $script:RepoRoot 'src\completion.ps1') -Destination $engineSrc
   }
   AfterAll {
     Remove-Item -LiteralPath $script:Folder -Recurse -Force
   }
 
-  It 'loads scripts in order, warns once for a broken one and moves to BORC_HOME' {
+  It 'loads scripts in order, warns once for a broken one, moves to BORC_HOME and loads completion' {
     # A child process, so the dot-sourcing and Set-Location never reach this session.
     $command = @"
 `$env:BORC_SETTINGS = '$script:Folder\settings'
 `$env:BORC_HOME = '$script:Folder\home'
+`$env:LOCALAPPDATA = '$script:Folder\localappdata'
 Set-Location -LiteralPath `$HOME
 . '$script:Folder\profile.ps1' 3>&1 | ForEach-Object { "warning: `$_" }
 Get-BorcTestA
 Get-BorcTestC
 (Get-Location).Path
+(TabExpansion2 -inputScript 'borc self-' -cursorColumn 10).CompletionMatches.CompletionText
 "@
     $output = @(pwsh -NoProfile -NonInteractive -Command $command)
     $output | Should -Be @(
       'warning: borc: b.ps1 failed to load: broken'
       'a'
       'c'
-      (Join-Path $script:Folder 'home'))
+      (Join-Path $script:Folder 'home')
+      'self-update')
   }
 }

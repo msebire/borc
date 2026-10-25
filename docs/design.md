@@ -176,6 +176,15 @@ they rerun the installer. The rewrite stays inside the markers and is skipped
 when nothing changed. The refresh runs in a child process from the updated
 engine, because the process doing the pull still holds the old code.
 
+### Tab completion inside the shell
+
+The completer runs on every Tab, so it lives in the shell itself, loaded
+by the profile block borc already manages, rather than starting borc in a new
+process each time. It reads `borc.yaml` as text and lists recipe files
+directly, without the YAML module, so it stays instant. Only winget IDs need a
+child process, and only once the word has a dot, because winget's own
+`winget complete` is the one source that knows them.
+
 ### Starter template on an empty URL or an empty remote
 
 Lets someone try borc in minutes. The first commit stays the user's, so

@@ -4,6 +4,53 @@ Latest report on top.
 
 ---
 
+## Step 15: Tab completion (2026-10-25)
+
+### Done
+
+- **`src/completion.ps1`** registers a native argument completer for `borc`
+  and `borc.cmd`. It completes:
+  - the commands, after `borc` and `borc help`;
+  - each command's options, with `--check` only after `--what-if`;
+  - `@local` recipes (quoted) and the recipes of the cloned repos, after
+    `install`, and winget IDs once the word has a dot, through
+    `winget complete`;
+  - the apps `borc.yaml` lists, after `uninstall`;
+  - recipe names, after `search`.
+- **Loading:** the profile block dot-sources it from the engine clone, so
+  `self-update` keeps it current. It works in Windows PowerShell 5.1 when
+  dot-sourced by hand.
+- **Tests:** go through `TabExpansion2`, as a real shell does, with
+  `BORC_SETTINGS` and `LOCALAPPDATA` set at process level only and
+  winget's completion answered by the test. The profile test now runs with
+  its own `LOCALAPPDATA` and checks that completion is loaded. 230 tests
+  pass.
+- **Checked by hand:** the real `winget complete` call returns `Git.GCM` and
+  `Git.Git`, and under 5.1 `borc apply --wh` completes to `--what-if`.
+- **Docs:** a "Tab completion" section in `docs/commands.md`, plus
+  `getting-started.md`, `design.md` and `CHANGELOG.md`.
+
+### Assumptions
+
+- Recipes from clones are listed by folder (`%LOCALAPPDATA%\borc\recipes`),
+  so a repo removed from `borc.yaml` still shows until its clone is deleted.
+- Once the argument is given, PowerShell's usual file-name completion takes
+  over.
+
+### Questions
+
+- None.
+
+### Deviations
+
+- Beyond the spec: added at the maintainer's request.
+
+### To verify
+
+- Pressing Tab in a real Windows Terminal after `borc self-update`.
+
+---
+
 ## Step 14: fixed versions (2026-10-25)
 
 ### Done

@@ -48,6 +48,31 @@ words always say the result too, so nothing depends on the colour. Set the
 `NO_COLOR` environment variable to turn colours off. The log file holds the
 same lines with the time in front and no colours.
 
+## Tab completion
+
+In PowerShell 7, press Tab after `borc` to complete:
+
+| After | Tab offers |
+| --- | --- |
+| `borc ` | the commands |
+| `borc help ` | the commands |
+| `borc apply --` | `--what-if`, `--debug`, `--help`, and `--check` once `--what-if` is there |
+| `borc install ` | your `@local` recipes and the recipes of the cloned recipe repos; winget IDs once the text has a dot, such as `Git.` |
+| `borc uninstall ` | the apps and recipes `borc.yaml` lists |
+| `borc search ` | recipe names |
+
+`@local` recipes are completed with quotes (`'@local/fonts'`), because `@`
+has a meaning of its own in PowerShell. Once the argument is given,
+PowerShell falls back to completing file names, as for any other command.
+
+The borc block of your PowerShell 7 profile loads the completion, and
+`borc self-update` keeps it current. In Windows PowerShell 5.1, load it by
+hand, or add this line to that profile:
+
+```powershell
+. "$env:LOCALAPPDATA\borc\engine\src\completion.ps1"
+```
+
 ## borc
 
 <!-- help: index -->
