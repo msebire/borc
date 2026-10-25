@@ -79,7 +79,8 @@ on 2026-10-24 with winget 1.29.380, DSC 3.2.2 and Windows 10 22H2:
   however many units are elevated.
 - Apps are installed with `Microsoft.WinGet/Package` units (`id` and
   `source`). `borc upgrade` upgrades these, and `borc uninstall` lists them
-  when the user removes the recipe.
+  when the user removes the recipe. Add `version` to install a given version
+  instead of the latest; `borc upgrade` then leaves the package alone.
 - `dependsOn` lists the **names** of the units to apply first. winget applies
   them first even when they come later in the file. The
   `[resourceId('<type>','<name>')]` form shown in the DSC documentation does

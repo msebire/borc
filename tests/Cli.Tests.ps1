@@ -398,6 +398,23 @@ Describe 'Commands with winget mocked' {
       }
     }
 
+    It 'leaves a package with a fixed version alone, and says so' {
+      $path = Join-Path $script:Settings 'borc\borc.yaml'
+      (Get-Content $path -Raw).Replace("  - winget: Git.Git`n", "  - winget: Git.Git`n    version: '2.45.1'`n") | Set-Content $path -NoNewline
+      InModuleScope Borc -Parameters @{ P = $script:Paths } {
+        param($P)
+        Mock Get-BorcPaths { $P }
+        $script:Shown = [System.Collections.Generic.List[string]]::new()
+        Mock Write-Host { $script:Shown.Add("$Object") }
+        $script:Upgraded = [System.Collections.Generic.List[string]]::new()
+        Mock Invoke-BorcWinget { $script:Upgraded.Add($Arguments[2]); 0 }
+        Invoke-Borc -Arguments @('upgrade') | Should -Be 0
+        $script:Upgraded | Should -Not -Contain 'Git.Git'
+        $script:Upgraded | Should -Contain '9NBLGGH4NNS1'
+        ($script:Shown -join "`n") | Should -Match 'Git\.Git stays at 2\.45\.1, the version fixed in borc\.yaml\.'
+      }
+    }
+
     It 'searches recipe names and descriptions, then winget' {
       InModuleScope Borc -Parameters @{ P = $script:Paths } {
         param($P)

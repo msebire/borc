@@ -6,6 +6,26 @@ function Test-BorcPackageInstalled {
   $result.ExitCode -eq 0
 }
 
+# The installed version of a package, or $null when it is not installed.
+function Get-BorcInstalledVersion {
+  param([Parameter(Mandatory)] [string] $Id)
+  $result = Invoke-BorcWingetQuiet -Arguments @('list', '--id', $Id, '--exact', '--accept-source-agreements', '--disable-interactivity')
+  if ($result.ExitCode -ne 0) { return $null }
+  $version = ConvertFrom-WingetListVersion -Id $Id -Lines $result.Output
+  if ($version) { $version } else { 'unknown' }
+}
+
+# Installed, missing, or installed in another version than the fixed one.
+function Get-BorcPackageState {
+  param([Parameter(Mandatory)] [string] $Id, [string] $Version = '')
+  if (-not $Version) {
+    $installed = Test-BorcPackageInstalled -Id $Id
+    return [pscustomobject]@{ Installed = $installed; Matches = $installed; InstalledVersion = $null }
+  }
+  $current = Get-BorcInstalledVersion -Id $Id
+  [pscustomobject]@{ Installed = [bool]$current; Matches = ($current -eq $Version); InstalledVersion = $current }
+}
+
 function Test-BorcWingetPackageExists {
   param([Parameter(Mandatory)] [string] $Id)
   $result = Invoke-BorcWingetQuiet -Arguments @('show', '--id', $Id, '--exact', '--source', 'winget', '--accept-source-agreements', '--disable-interactivity')
@@ -20,21 +40,23 @@ function Get-BorcPackageArguments {
 }
 
 # Every package borc.yaml lists: plain IDs, then the packages of listed recipes.
+# A package listed twice keeps the first entry, but a version fixed by either
+# entry wins, so borc upgrade never moves it past that version.
 function Get-BorcListedPackages {
   param([Parameter(Mandatory)] $Plan)
-  $seen = @{}
+  $seen = [ordered]@{}
   $packages = @(
     foreach ($app in $Plan.Config.Apps) {
-      if ($app.Kind -in 'winget', 'msstore') { [pscustomobject]@{ Source = $app.Kind; Id = $app.Id } }
+      if ($app.Kind -in 'winget', 'msstore') { [pscustomobject]@{ Source = $app.Kind; Id = $app.Id; Version = "$($app.Version)"; Origin = 'borc.yaml' } }
     }
     foreach ($id in $Plan.Order) { Get-BorcRecipePackages -Recipe $Plan.Recipes[$id] }
   )
   foreach ($package in $packages) {
     $key = "$($package.Source)|$($package.Id)".ToLowerInvariant()
-    if ($seen.ContainsKey($key)) { continue }
-    $seen[$key] = $true
-    $package
+    if (-not $seen.Contains($key)) { $seen[$key] = $package; continue }
+    if ($package.Version -and -not $seen[$key].Version) { $seen[$key] = $package }
   }
+  $seen.Values
 }
 
 # Writes borc.yaml back, keeping a BOM if it had one.

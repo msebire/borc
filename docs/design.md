@@ -107,6 +107,14 @@ the packages so the user decides.
 
 Predictable, and it never touches apps borc did not install.
 
+### A fixed version wins over upgrade
+
+A version written in `borc.yaml` or in a recipe is a decision: the user needs
+that version. `borc upgrade` respects it rather than moving past it, and says
+so; changing the version means editing the file, where the decision lives.
+borc keeps the version in the configuration rather than using `winget pin`,
+so the choice is tracked in Git and the same on every machine of the branch.
+
 ### install and uninstall edit borc.yaml as text
 
 `borc.yaml` is the user's file, with their comments and layout. A YAML

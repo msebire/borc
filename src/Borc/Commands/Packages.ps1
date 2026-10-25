@@ -7,7 +7,11 @@ function Invoke-BorcUpgrade {
   Start-BorcStep -Name 'Checking borc.yaml and the recipes'
   $plan = Get-BorcPlan -SettingsRoot $Paths.Settings -RecipesRoot $Paths.Recipes
   if ($plan.Errors.Count -gt 0) { Write-BorcPlanErrors -Errors $plan.Errors; return 1 }
-  $packages = @(Get-BorcListedPackages -Plan $plan)
+  $listed = @(Get-BorcListedPackages -Plan $plan)
+  foreach ($fixed in @($listed | Where-Object Version)) {
+    Write-BorcLog -Message "$($fixed.Id) stays at $($fixed.Version), the version fixed in $($fixed.Origin)."
+  }
+  $packages = @($listed | Where-Object { -not $_.Version })
   Start-BorcStep -Name "Upgrading $($packages.Count) package(s)"
   $okCodes = @{ $script:WingetNoApplicableUpgrade = 'no upgrade available'; $script:WingetNoPackageFound = 'not installed; borc apply installs it' }
   $failed = 0

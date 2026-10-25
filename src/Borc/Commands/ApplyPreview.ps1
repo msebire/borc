@@ -127,8 +127,18 @@ function Write-BorcPreviewSummary {
 
 function Get-BorcPlainVerdict {
   param([Parameter(Mandatory)] $App)
-  $verdict = if (Test-BorcPackageInstalled -Id $App.Id) { 'installed' } else { 'would be installed' }
-  [pscustomobject]@{ Kind = $App.Kind; Id = $App.Id; Verdict = $verdict; Note = ''; Details = @() }
+  $state = Get-BorcPackageState -Id $App.Id -Version "$($App.Version)"
+  $verdict = if ($state.Matches) { 'installed' } else { 'would be installed' }
+  $details = @(if ($App.Version) { "version $($App.Version) fixed$(Format-BorcInstalledVersion -State $state -Version $App.Version)" })
+  [pscustomobject]@{ Kind = $App.Kind; Id = $App.Id; Verdict = $verdict; Note = ''; Details = $details }
+}
+
+# ", 1.8.2 is installed" when another version than the fixed one is there.
+function Format-BorcInstalledVersion {
+  param([Parameter(Mandatory)] $State, [string] $Version)
+  if (-not $Version -or $State.Matches) { return '' }
+  if ($State.Installed) { return ", $($State.InstalledVersion) is installed" }
+  ', not installed'
 }
 
 function Get-BorcRecipeVerdict {
@@ -139,7 +149,12 @@ function Get-BorcRecipeVerdict {
   $dropped = [System.Collections.Generic.List[string]]::new()
   $units = @(ConvertTo-BorcRecipeUnits -Recipe $recipe -Parameters $parameters -Dropped $dropped)
   $packages = @($units | Where-Object { $_['type'] -eq $script:WingetPackageType })
-  $missing = @($packages | Where-Object { -not (Test-BorcPackageInstalled -Id "$($_['properties']['id'])") } | ForEach-Object { "$($_['properties']['id'])" })
+  $missing = @(foreach ($package in $packages) {
+      $packageId = "$($package['properties']['id'])"
+      $version = "$($package['properties']['version'])"
+      $state = Get-BorcPackageState -Id $packageId -Version $version
+      if (-not $state.Matches) { if ($version) { "$packageId $version$(Format-BorcInstalledVersion -State $state -Version $version)" } else { $packageId } }
+    })
   $settings = $units.Count - $packages.Count
   $note = if ($recipe.Reboot) { ' (runs first, may need a restart)' } else { '' }
   if ($null -ne $Checks) { return Get-BorcCheckedRecipeVerdict -Id $Id -Units $units -Dropped @($dropped) -Checks $Checks -Note $note }

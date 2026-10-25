@@ -43,7 +43,7 @@ function New-BorcDocument {
 function Get-BorcPackageUnits {
   param([Parameter(Mandatory)] $Config)
   foreach ($app in $Config.Apps) {
-    if ($app.Kind -in 'winget', 'msstore') { New-WingetPackageUnit -Source $app.Kind -Id $app.Id }
+    if ($app.Kind -in 'winget', 'msstore') { New-WingetPackageUnit -Source $app.Kind -Id $app.Id -Version $app.Version }
   }
 }
 

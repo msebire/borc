@@ -121,6 +121,14 @@ Describe 'Edge cases' {
     $runs.Main.resources.Count | Should -Be 1
   }
 
+  It 'passes a fixed version to the package unit' {
+    $plan = Get-FixturePlan -ConfigText "apps:`n  - winget: jqlang.jq`n    version: '1.7.1'`n  - winget: Git.Git"
+    $runs = InModuleScope Borc -Parameters @{ Plan = $plan } { param($Plan) New-BorcRunDocuments -Plan $Plan }
+    $runs.Main.resources[0].properties.Keys | Should -Be @('id', 'source', 'version')
+    $runs.Main.resources[0].properties.version | Should -Be '1.7.1'
+    $runs.Main.resources[1].properties.Contains('version') | Should -BeFalse
+  }
+
   It 'has no run at all for an empty configuration' {
     $plan = Get-FixturePlan -ConfigText 'apps: []'
     $runs = InModuleScope Borc -Parameters @{ Plan = $plan } { param($Plan) New-BorcRunDocuments -Plan $Plan }

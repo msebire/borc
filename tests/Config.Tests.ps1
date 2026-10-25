@@ -54,6 +54,18 @@ recipes:
     $config.Apps[0].Parameters['port'] | Should -Be '8080'
   }
 
+  It 'accepts a fixed version on a winget app, quoted' {
+    $config = InModuleScope Borc { ConvertTo-BorcConfig -Text "apps:`n  - winget: jqlang.jq`n    version: '1.7'" }
+    $config.Errors | Should -BeNullOrEmpty
+    $config.Apps[0].Version | Should -Be '1.7'
+  }
+
+  It 'refuses an unquoted version that YAML reads as a number, and a version on a Store app' {
+    $config = InModuleScope Borc { ConvertTo-BorcConfig -Text "apps:`n  - winget: jqlang.jq`n    version: 1.7`n  - msstore: 9X`n    version: '1'" }
+    ($config.Errors -join "`n") | Should -Match "version of jqlang.jq must be a string. Quote it"
+    ($config.Errors -join "`n") | Should -Match "unknown key 'version' in the apps entry for 9X"
+  }
+
   It 'accepts @local recipes without a recipes entry' {
     $config = InModuleScope Borc { ConvertTo-BorcConfig -Text "apps:`n  - recipe: '@local/tool'" }
     $config.Errors | Should -BeNullOrEmpty

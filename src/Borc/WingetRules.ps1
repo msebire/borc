@@ -13,6 +13,8 @@
 # found, even with a simple name. borc's prefixed names (with @, /, : and
 # spaces) work, for PowerShellScript and Microsoft.WinGet/Package targets.
 # A Microsoft.WinGet/Package unit with id and source: winget applies too.
+# With version, verified on 2026-10-25: jqlang.jq version 1.7.1 installed 1.7.1
+# while 1.8.2 was available, and a second apply left it at 1.7.1.
 #
 # Not verified yet: Microsoft.WinGet/Package with source: msstore.
 
@@ -81,10 +83,22 @@ function Format-WingetPackageName {
 }
 
 function New-WingetPackageUnit {
-  param([Parameter(Mandatory)] [string] $Source, [Parameter(Mandatory)] [string] $Id)
+  param([Parameter(Mandatory)] [string] $Source, [Parameter(Mandatory)] [string] $Id, [string] $Version = '')
+  $properties = [ordered]@{ id = $Id; source = $Source }
+  if ($Version) { $properties['version'] = $Version }
   [ordered]@{
     name = Format-WingetPackageName -Source $Source -Id $Id
     type = $script:WingetPackageType
-    properties = [ordered]@{ id = $Id; source = $Source }
+    properties = $properties
   }
+}
+
+# The version winget list shows for an installed package: the column right
+# after its ID ("Git  Git.Git 2.56.0.3 winget"). $null when it is not there.
+function ConvertFrom-WingetListVersion {
+  param([Parameter(Mandatory)] [string] $Id, [string[]] $Lines = @())
+  foreach ($line in $Lines) {
+    if ($line -match "(?i)(^|\s)$([regex]::Escape($Id))\s+(?<version>\S+)") { return $Matches['version'] }
+  }
+  $null
 }

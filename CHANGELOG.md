@@ -27,6 +27,8 @@ The version number is chosen when the release is cut.
   - prefixes resource names with their recipe;
   - turns `requires` into `dependsOn`;
   - runs `reboot: true` recipes first.
+- A fixed `version` for `winget` apps in `borc.yaml` and for package units in
+  recipes. `borc upgrade` leaves those packages at their version.
 - Validation of `borc.yaml` and recipes, reporting every problem before
   anything runs.
 - `Get-BorcSecret`, for PowerShell 7 and Windows PowerShell 5.1, backed by

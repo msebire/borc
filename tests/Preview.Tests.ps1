@@ -62,6 +62,40 @@ Describe 'Recipe verdicts' {
   }
 }
 
+Describe 'Fixed versions' {
+  It 'reads the installed version from real winget list output, not the available one' {
+    $lines = @('Name Id        Version Available Source', '-------------------------------------------', 'jq   jqlang.jq 1.7.1   1.8.2     winget')
+    InModuleScope Borc -Parameters @{ L = $lines } { param($L) ConvertFrom-WingetListVersion -Id 'jqlang.jq' -Lines $L } | Should -Be '1.7.1'
+  }
+
+  It 'counts a plain app as installed only in its fixed version' {
+    InModuleScope Borc {
+      Mock Get-BorcInstalledVersion { '1.8.2' }
+      $verdict = Get-BorcPlainVerdict -App ([pscustomobject]@{ Kind = 'winget'; Id = 'jqlang.jq'; Version = '1.7.1' })
+      $verdict.Verdict | Should -Be 'would be installed'
+      $verdict.Details | Should -Be @('version 1.7.1 fixed, 1.8.2 is installed')
+      Mock Get-BorcInstalledVersion { '1.7.1' }
+      $verdict = Get-BorcPlainVerdict -App ([pscustomobject]@{ Kind = 'winget'; Id = 'jqlang.jq'; Version = '1.7.1' })
+      $verdict.Verdict | Should -Be 'installed'
+      $verdict.Details | Should -Be @('version 1.7.1 fixed')
+    }
+  }
+
+  It 'keeps a version a recipe fixes, even when borc.yaml lists the same package without one' {
+    InModuleScope Borc {
+      $recipe = [pscustomobject]@{ Id = 'r/x'; Resources = @([ordered]@{ name = 'p'; type = 'Microsoft.WinGet/Package'; properties = [ordered]@{ id = 'Git.Git'; source = 'winget'; version = '2.45.1' } }) }
+      $plan = [pscustomobject]@{
+        Config = [pscustomobject]@{ Apps = @([pscustomobject]@{ Kind = 'winget'; Id = 'Git.Git'; Version = '' }) }
+        Recipes = [ordered]@{ 'r/x' = $recipe }; Order = @('r/x')
+      }
+      $listed = @(Get-BorcListedPackages -Plan $plan)
+      $listed.Count | Should -Be 1
+      $listed[0].Version | Should -Be '2.45.1'
+      $listed[0].Origin | Should -Be 'recipe r/x'
+    }
+  }
+}
+
 Describe 'Reading winget configure test' {
   It 'reads the state of every unit from real winget 1.29 output' {
     $lines = [IO.File]::ReadAllLines((Join-Path $script:FixturesRoot 'winget-configure-test.txt'))

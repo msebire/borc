@@ -56,6 +56,26 @@ The apps to install, in order. Each entry has exactly one of these keys:
 Find IDs with `borc search <term>`, or add an app with `borc install`, which
 edits this list for you and keeps your comments and formatting.
 
+### version
+
+A `winget` entry can fix the version to install, instead of the latest one:
+
+<!-- example: examples/version.borc.yaml -->
+```yaml
+apps:
+  - winget: jqlang.jq
+    version: '1.7.1'
+```
+
+- Quote the value: YAML would read `1.7` as a number.
+- `winget show --id <id> --versions` lists the versions available.
+- `borc upgrade` leaves a package with a fixed version alone, and says so.
+  To move to another version, change the value and run `borc apply`.
+- `--what-if` counts the app as installed only when this exact version is
+  installed.
+- `msstore` entries have no version: the Store always installs the current
+  one.
+
 ### @local recipes
 
 `@local/<name>` is a recipe of your own, in `borc/cookbook/<name>.yaml` of
@@ -132,10 +152,11 @@ again.
 | `secrets must map each secret name to a short description.` | `secrets` holds a list or a single value. |
 | `two recipe repos are named '<name>'. Give one of them an alias.` | Two `recipes` entries end with the same Git repo name. |
 | `each apps entry needs exactly one of winget, msstore or recipe.` | An `apps` entry has none of these keys, or more than one. |
-| `unknown key '<key>' in the apps entry for <id>.` | For example `parameters` under a `winget` entry. |
+| `unknown key '<key>' in the apps entry for <id>.` | For example `parameters` under a `winget` entry, or `version` under an `msstore` entry. |
 | `'<value>' is not a recipe reference. Use repo/recipe or @local/<name>.` | A `recipe` value without the `repo/` part. |
 | `recipe <id> refers to the repo '<repo>', which is not listed under recipes.` | Add the repo under `recipes`, or fix the name or alias. |
 | `parameter <name> of <id> must be a string. Quote the value, ...` | A number, `true` or a list where a string is expected. |
+| `version of <id> must be a string. Quote it, ...` | `version: 1.7` without quotes, which YAML reads as a number. |
 | `<kind> <id> is listed twice under apps.` | The same app appears twice. |
 | `'<name>' is not a valid secret name (letters, digits and '_').` | Rename the secret. |
 

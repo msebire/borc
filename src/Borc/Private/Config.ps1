@@ -115,6 +115,7 @@ function ConvertTo-BorcApp {
   foreach ($key in $Entry.Keys) {
     if ($key -eq $kind) { continue }
     if ($key -eq 'parameters' -and $kind -eq 'recipe') { continue }
+    if ($key -eq 'version' -and $kind -eq 'winget') { continue }
     $Config.Errors.Add("${source}: unknown key '$key' in the apps entry for $id.")
   }
   if ($kind -eq 'recipe' -and -not (Test-BorcRecipeReference -Id $id -Config $Config)) { return $null }
@@ -122,7 +123,14 @@ function ConvertTo-BorcApp {
   if ($kind -eq 'recipe' -and $Entry.Contains('parameters')) {
     $parameters = Read-BorcAppParameters -Node $Entry['parameters'] -RecipeId $id -Config $Config
   }
-  [pscustomobject]@{ Kind = $kind; Id = $id; Parameters = $parameters }
+  $version = ''
+  if ($kind -eq 'winget' -and $Entry.Contains('version')) {
+    $value = $Entry['version']
+    # YAML reads 1.7 as a number, which would come back as "1.7" or worse.
+    if ($value -is [string] -and $value) { $version = $value }
+    else { $Config.Errors.Add("${source}: version of $id must be a string. Quote it, for example version: '$value'.") }
+  }
+  [pscustomobject]@{ Kind = $kind; Id = $id; Parameters = $parameters; Version = $version }
 }
 
 function Test-BorcRecipeReference {

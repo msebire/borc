@@ -169,7 +169,7 @@ function Add-BorcPlaceholders {
   }
 }
 
-# Winget packages a recipe installs, as source and id pairs.
+# Winget packages a recipe installs: source, id, and the version it fixes, if any.
 function Get-BorcRecipePackages {
   param([Parameter(Mandatory)] $Recipe)
   foreach ($resource in $Recipe.Resources) {
@@ -177,6 +177,7 @@ function Get-BorcRecipePackages {
     $properties = $resource['properties']
     if (-not (Test-BorcMap $properties) -or -not $properties['id']) { continue }
     $source = if ($properties['source']) { "$($properties['source'])" } else { 'winget' }
-    [pscustomobject]@{ Source = $source; Id = "$($properties['id'])" }
+    $version = if ($properties['version']) { "$($properties['version'])" } else { '' }
+    [pscustomobject]@{ Source = $source; Id = "$($properties['id'])"; Version = $version; Origin = "recipe $($Recipe.Id)" }
   }
 }
