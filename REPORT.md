@@ -4,6 +4,64 @@ Latest report on top.
 
 ---
 
+## Step 13: apply --what-if --check (2026-10-25)
+
+### Done
+
+- **New step:** `borc apply --what-if --check` adds one step, "Testing the
+  recipes' units (winget configure test)".
+  - Every recipe unit, from the reboot run and the main run, goes through a
+    single `winget configure test`, so elevated units ask for one UAC
+    prompt. Plain packages are left out: `winget list` already answers for
+    them.
+  - Each recipe then shows `would be applied` (naming the units that would
+    change), `in place`, or `may be applied` with the units that could not
+    be tested and why.
+- **Command line:** `borc apply --check` without `--what-if` is refused with
+  exit code 2.
+- **winget's test output, probed on a harmless file** (winget 1.29.380):
+  - each unit's `<type> [<name>]` line is followed by "System is (not) in
+    the described configuration state.", or by "The configuration unit
+    failed while attempting to test…" and the script's error;
+  - a unit that depends on one not in place is still tested;
+  - no `setScript` runs;
+  - the exit code is not 0 as soon as one unit would change, so borc reads
+    the lines.
+
+  These strings are in `WingetRules.ps1`, and the real output is a test
+  fixture.
+- **Checked by hand:** a throwaway repo with its elevated recipes removed (so
+  no UAC prompt) gave definite verdicts. The test step took 27 s.
+- **Docs and tests:** the `apply` help page, `docs/commands.md`,
+  `docs/design.md` and `CHANGELOG.md` are updated. New tests cover the
+  parser on the real output, the checked verdicts, the summary wording, the
+  refused option and a full `--what-if --check` run with winget mocked.
+  209 tests pass.
+
+### Assumptions
+
+- **Unknown output:** a result line borc does not recognise (another winget
+  version, or a non-English UI) gives "could not test", and the recipe stays
+  `may be applied`.
+- **Failed tests:** a unit whose test fails is shown as "could not test",
+  with the exception text as the reason.
+
+### Questions
+
+- None.
+
+### Deviations
+
+- None.
+
+### To verify
+
+- `--check` with elevated units: one UAC prompt for all of them.
+- winget's result lines under a non-English Windows UI. borc then reports
+  "could not test" rather than guessing, but the strings may need adding.
+
+---
+
 ## Step 12: verdicts in apply --what-if (2026-10-25)
 
 ### Done

@@ -1,4 +1,4 @@
-Usage: borc apply [--what-if] [--debug]
+Usage: borc apply [--what-if [--check]] [--debug]
 
 Pulls the config repo and the recipe repos, then applies borc.yaml.
 
@@ -27,6 +27,10 @@ Options:
                 may be applied: no package is missing, but the recipe's
                   settings are only checked when borc apply runs
                 installed, in place: nothing to do
+  --check     With --what-if only: also run each recipe unit's test
+              (winget configure test), so every recipe is either "would be
+              applied" or "in place". Slower; testScripts run, setScripts
+              never do; elevated units ask for one UAC prompt.
   --debug     Run the recipes one at a time, to find the one that fails.
               Each run may show its own UAC prompt.
   -h, --help  Show this page.

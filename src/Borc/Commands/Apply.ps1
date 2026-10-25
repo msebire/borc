@@ -1,9 +1,9 @@
 ﻿$script:BorcRestartExitCode = 3010
 
 function Invoke-BorcApply {
-  param([Parameter(Mandatory)] $Paths, [switch] $Preview, [switch] $OneByOne)
+  param([Parameter(Mandatory)] $Paths, [switch] $Preview, [switch] $Check, [switch] $OneByOne)
   Assert-BorcSettings -Paths $Paths
-  if ($Preview) { return Invoke-BorcApplyPreview -Paths $Paths }
+  if ($Preview) { return Invoke-BorcApplyPreview -Paths $Paths -Check:$Check }
 
   Start-BorcSteps -Total 5
   Start-BorcStep -Name "Pulling the config repo ($($Paths.Settings))"

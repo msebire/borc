@@ -25,6 +25,17 @@ $script:WingetPackageType = 'Microsoft.WinGet/Package'
 $script:WingetConfigureArguments = @('--accept-configuration-agreements', '--disable-interactivity')
 $script:WingetAgreementArguments = @('--accept-package-agreements', '--accept-source-agreements', '--disable-interactivity')
 
+# winget configure test, as read by apply --what-if --check. Seen on winget
+# 1.29.380 (English UI): after each "<type> [<name>]" line, one line gives the
+# unit's state; a failed test adds the script's error below. The exit code is
+# not 0 as soon as one unit is not in place, so borc reads the lines instead.
+# Any other line is reported as "could not check", never guessed.
+$script:WingetTestArguments = @('--accept-configuration-agreements', '--disable-interactivity', '--suppress-initial-details')
+$script:WingetTestUnitPattern = '^(?<type>[\w.]+/[\w.]+) \[(?<name>.+)\]$'
+$script:WingetTestInState = 'System is in the described configuration state.'
+$script:WingetTestNotInState = 'System is not in the described configuration state.'
+$script:WingetTestFailed = 'The configuration unit failed while attempting to test the current system state.'
+
 # winget exit codes that do not mean a failure for upgrade and uninstall.
 $script:WingetNoApplicableUpgrade = 0x8A15002B
 $script:WingetNoPackageFound = 0x8A150014

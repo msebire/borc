@@ -205,6 +205,15 @@ recipe whose packages are all there but which also has settings units is
 `may be applied`, not `in place`. The count at the end gives the answer at a
 glance.
 
+`--check` is the opt-in for a precise answer. It is an option of `--what-if`
+rather than a command of its own: it only makes sense when nothing is applied,
+since `apply` already tests every unit before acting, and a separate command
+would duplicate most of `--what-if`. All units go through one
+`winget configure test`, so elevated units ask for admin rights once. borc
+reads winget's per-unit result lines rather than its exit code, which is not 0
+as soon as one unit would change; a line it does not recognise becomes
+"could not test", never a guess.
+
 ### Trust winget on failures
 
 winget's errors are shown as they come and its exit code is reported. Retry

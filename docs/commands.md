@@ -83,7 +83,7 @@ borc <command> --help and borc <command> -h show the same page.
 
 <!-- help: apply -->
 ```text
-Usage: borc apply [--what-if] [--debug]
+Usage: borc apply [--what-if [--check]] [--debug]
 
 Pulls the config repo and the recipe repos, then applies borc.yaml.
 
@@ -112,6 +112,10 @@ Options:
                 may be applied: no package is missing, but the recipe's
                   settings are only checked when borc apply runs
                 installed, in place: nothing to do
+  --check     With --what-if only: also run each recipe unit's test
+              (winget configure test), so every recipe is either "would be
+              applied" or "in place". Slower; testScripts run, setScripts
+              never do; elevated units ask for one UAC prompt.
   --debug     Run the recipes one at a time, to find the one that fails.
               Each run may show its own UAC prompt.
   -h, --help  Show this page.
@@ -162,6 +166,30 @@ it. It says so, line by line:
 - **Under each recipe,** borc lists the missing packages, the settings units
   it did not check, and the units skipped because a parameter has no value.
 - **The last lines** count the verdicts.
+
+### A precise answer: `--what-if --check`
+
+`borc apply --what-if --check` adds one step: every recipe unit, from both
+runs, goes through a single `winget configure test`. Each unit's `testScript`
+runs, and no `setScript` does. Every recipe then gets a definite verdict:
+
+```text
+  recipe  recipes/node                  would be applied
+          units: 2 of 3 in place
+          would change: npm cache
+          skipped: 1 (no value for npmPrefix)
+  recipe  @local/fonts                  in place
+          units: 1 of 1 in place
+```
+
+- **Plain apps** keep the `winget list` answer.
+- **A unit whose test fails** (for example, because the tool it checks is not
+  installed yet) is listed under `could not test`, with the reason, and its
+  recipe stays `may be applied`.
+- **It is slower:** winget starts every resource. Elevated units ask for one
+  UAC prompt, for all of them together.
+- **`--check` only works with `--what-if`:** a real `borc apply` already runs
+  every test before acting.
 
 ## borc upgrade
 

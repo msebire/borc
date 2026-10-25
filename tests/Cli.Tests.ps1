@@ -34,6 +34,12 @@ Describe 'Help' {
     (Invoke-TestBorc -Arguments @($Command, '-h')).Output | Should -BeExactly $page
   }
 
+  It 'refuses --check without --what-if' {
+    $result = Invoke-TestBorc -Arguments @('apply', '--check')
+    $result.Code | Should -Be 2
+    $result.Output | Should -Match 'only works with --what-if'
+  }
+
   It 'rejects an unknown command or option' {
     (Invoke-TestBorc -Arguments @('frobnicate')).Code | Should -Be 2
     (Invoke-TestBorc -Arguments @('help', 'frobnicate')).Code | Should -Be 2
@@ -209,6 +215,36 @@ Describe 'Commands with winget mocked' {
         Invoke-Borc -Arguments @('apply', '--debug') | Should -Be 1
         $script:Count | Should -Be 3
         ($script:Shown -join "`n") | Should -Match 'The failing recipe is recipes/npm-auth'
+      }
+    }
+
+    It 'tests the recipe units once with --what-if --check and gives definite verdicts' {
+      InModuleScope Borc -Parameters @{ P = $script:Paths } {
+        param($P)
+        Mock Get-BorcPaths { $P }
+        $script:Shown = [System.Collections.Generic.List[string]]::new()
+        Mock Write-Host { $script:Shown.Add("$Object") }
+        Mock Invoke-BorcWinget { throw 'winget must not apply anything' }
+        Mock Test-BorcStoredSecret { $true }
+        # winget answers from the units in the file borc wrote: npm cache would change.
+        Mock Invoke-BorcWingetQuiet {
+          if ($Arguments[0] -ne 'configure') { return [pscustomobject]@{ ExitCode = 0; Output = @() } }
+          $document = ConvertFrom-BorcYaml -Text ([IO.File]::ReadAllText($Arguments[3]))
+          $lines = foreach ($unit in $document.resources) {
+            "$($unit.type) [$($unit.name)]"
+            if ($unit.name -eq 'recipes/node: npm cache') { '  System is not in the described configuration state.' } else { '  System is in the described configuration state.' }
+          }
+          [pscustomobject]@{ ExitCode = 1; Output = @($lines) }
+        }
+        Invoke-Borc -Arguments @('apply', '--what-if', '--check') | Should -Be 0
+        Should -Invoke Invoke-BorcWingetQuiet -Times 1 -Exactly -ParameterFilter { $Arguments[0] -eq 'configure' -and $Arguments[1] -eq 'test' -and '--suppress-initial-details' -in $Arguments }
+        $text = $script:Shown -join "`n"
+        $text | Should -Match '==> \[2/5\] Testing the recipes'' units'
+        $text | Should -Match '< done in \d+s \(\d+ unit\(s\) tested\)'
+        $text | Should -Match '  recipe  recipes/node\s+would be applied\n\s+units: 1 of 2 in place\n\s+would change: npm cache\n\s+skipped: 1 \(no value for npmPrefix\)'
+        $text | Should -Match '  recipe  recipes/idea\s+in place'
+        $text | Should -Match 'expect one UAC prompt'
+        $text | Should -Not -Match '"may be applied"'
       }
     }
 
