@@ -4,6 +4,50 @@ Latest report on top.
 
 ---
 
+## Step 12: verdicts in apply --what-if (2026-10-25)
+
+### Done
+
+- `--what-if` used to list every recipe as "would be applied", because it
+  never checked recipes. It now gives each line a verdict from what it can
+  know without running recipe code:
+  - **Plain apps:** `installed` or `would be installed`.
+  - **`would be applied`:** one of the recipe's `Microsoft.WinGet/Package`
+    units is missing.
+  - **`in place`:** the recipe only installs packages, and all of them are
+    there.
+  - **`may be applied`:** the packages are there, but the settings units are
+    only checked by `borc apply`.
+- Under each recipe, borc lists the missing packages, the settings units it
+  did not check, and the units skipped for a missing parameter. Reboot
+  recipes are listed first, as they run first.
+- A count line ends the list, for example "2 would be installed or applied,
+  1 may be applied, 3 in place.", with a one-time explanation of "may be
+  applied" when it appears.
+- The `apply` help page and `docs/commands.md` describe the verdicts.
+  `docs/design.md` has an entry, and `CHANGELOG.md` has a line. New tests in
+  `tests/Preview.Tests.ps1`; 201 tests pass. A run on the throwaway check
+  repo read as expected.
+
+### Assumptions
+
+- A recipe whose units are all skipped (missing parameters) and that has no
+  package is `in place`: borc would run nothing for it.
+
+### Questions
+
+- None.
+
+### Deviations
+
+- None.
+
+### To verify
+
+- Nothing new.
+
+---
+
 ## Step 11: dependsOn and requires fixed for winget 1.29 (2026-10-24)
 
 ### Done

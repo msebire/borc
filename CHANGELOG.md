@@ -33,6 +33,9 @@ The version number is chosen when the release is cut.
   Windows Credential Manager.
 - The starter template for a new config repo.
 - Logs in `%LOCALAPPDATA%\borc\logs`, keeping the last 20 runs.
+- `borc apply --what-if` gives each app and recipe a verdict (`would be
+  installed`, `would be applied`, `may be applied`, `installed`, `in place`),
+  says what was checked, and counts the verdicts.
 - Readable output: numbered steps separated by blank lines, a start and an
   end line around every `git` and `winget` command, a summary with each
   step's result and duration, and colours (`NO_COLOR` turns them off), in

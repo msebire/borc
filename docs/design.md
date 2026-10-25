@@ -195,6 +195,16 @@ the result too: the output stays readable in the log, when pasted into an
 issue, and without colour. Tool output is still shown in full, because borc
 shows winget's errors as they come.
 
+### --what-if says what it checked
+
+Knowing whether a recipe's settings are in place means running its
+`testScript`s, which is slow and, for elevated units, needs a UAC prompt.
+`--what-if` must stay quick, prompt-free and free of recipe code, so it checks
+only what `winget list` can tell. Its verdicts never claim more than that: a
+recipe whose packages are all there but which also has settings units is
+`may be applied`, not `in place`. The count at the end gives the answer at a
+glance.
+
 ### Trust winget on failures
 
 winget's errors are shown as they come and its exit code is reported. Retry

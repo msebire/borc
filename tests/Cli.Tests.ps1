@@ -226,10 +226,15 @@ Describe 'Commands with winget mocked' {
         Mock Read-BorcSecretInput { throw 'no secret may be asked' }
         Invoke-Borc -Arguments @('apply', '--what-if') | Should -Be 0
         $text = $script:Shown -join "`n"
-        $text | Should -Match 'winget Git.Git: installed'
-        $text | Should -Match 'msstore 9NBLGGH4NNS1: would be installed'
-        $text | Should -Match 'recipe recipes/wsl: would be applied \(runs first'
-        $text | Should -Match "'npm prefix' skipped"
+        $text | Should -Match '  winget  Git\.Git\s+installed'
+        $text | Should -Match '  msstore 9NBLGGH4NNS1\s+would be installed'
+        $text | Should -Match '  recipe  recipes/wsl\s+may be applied \(runs first, may need a restart\)'
+        $text | Should -Match '  recipe  recipes/node\s+would be applied\n\s+packages: 0 of 1 installed \(OpenJS\.NodeJS\.LTS\)\n\s+settings: 1 unit, not checked; 1 skipped \(no value for npmPrefix\)'
+        $text | Should -Match '  recipe  recipes/npm-auth\s+may be applied\n\s+packages: none\n\s+settings: 1 unit, not checked'
+        $text | Should -Match '  4 would be installed or applied, 2 may be applied, 1 in place\.'
+        $text | Should -Match '"may be applied": no package is missing'
+        # The reboot recipe is listed first, as it runs first.
+        $text.IndexOf('recipe  recipes/wsl ') | Should -BeLessThan $text.IndexOf('recipe  recipes/node ')
         $text | Should -Match '==> \[3/4\] Secrets that would be asked for'
         $text | Should -Match '  NPM_TOKEN \(token for the company npm registry\)'
         $text | Should -Match 'Nothing was changed'

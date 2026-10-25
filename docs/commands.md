@@ -106,8 +106,12 @@ skip logic of its own.
 
 Options:
   --what-if   Fetch without merging, then show what the pull would bring,
-              which apps and recipes would be installed and which secrets
-              would be asked for. Changes nothing.
+              a verdict for each app and recipe, and which secrets would be
+              asked for. Changes nothing and runs no recipe code. Verdicts:
+                would be installed, would be applied: something is missing
+                may be applied: no package is missing, but the recipe's
+                  settings are only checked when borc apply runs
+                installed, in place: nothing to do
   --debug     Run the recipes one at a time, to find the one that fails.
               Each run may show its own UAC prompt.
   -h, --help  Show this page.
@@ -122,6 +126,42 @@ Exit codes:
 `reboot: true`, then once for everything else, so a run normally shows one
 UAC prompt per `winget configure` that has elevated units. The generated
 configuration files are saved next to the log.
+
+### What `--what-if` checks
+
+`--what-if` runs no recipe code, so it only knows what `winget list` can tell
+it. It says so, line by line:
+
+```text
+==> [2/4] What would be installed
+  winget  Git.Git                       installed
+  winget  Microsoft.VisualStudioCode    would be installed
+
+  recipe  @local/wsl-ubuntu             would be applied (runs first, may need a restart)
+          packages: 0 of 1 installed (Canonical.Ubuntu.2404)
+          settings: 1 unit, not checked
+  recipe  recipes/node                  may be applied
+          packages: 1 of 1 installed
+          settings: 2 units, not checked; 1 skipped (no value for npmPrefix)
+  recipe  @local/fonts                  in place
+          packages: 1 of 1 installed, no settings
+
+  2 would be installed or applied, 1 may be applied, 2 in place.
+  "may be applied": no package is missing, but its settings are only
+  checked when borc apply runs.
+```
+
+- **A plain app** is `installed` or `would be installed`.
+- **A recipe** is:
+  - `would be applied` when one of its packages (`Microsoft.WinGet/Package`
+    units) is missing;
+  - `in place` when it only installs packages and all of them are there;
+  - `may be applied` otherwise: its packages are there, but its settings
+    units (scripts) are only checked by their `testScript` when `borc apply`
+    runs, and winget then skips the ones already in place.
+- **Under each recipe,** borc lists the missing packages, the settings units
+  it did not check, and the units skipped because a parameter has no value.
+- **The last lines** count the verdicts.
 
 ## borc upgrade
 

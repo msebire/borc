@@ -21,8 +21,12 @@ skip logic of its own.
 
 Options:
   --what-if   Fetch without merging, then show what the pull would bring,
-              which apps and recipes would be installed and which secrets
-              would be asked for. Changes nothing.
+              a verdict for each app and recipe, and which secrets would be
+              asked for. Changes nothing and runs no recipe code. Verdicts:
+                would be installed, would be applied: something is missing
+                may be applied: no package is missing, but the recipe's
+                  settings are only checked when borc apply runs
+                installed, in place: nothing to do
   --debug     Run the recipes one at a time, to find the one that fails.
               Each run may show its own UAC prompt.
   -h, --help  Show this page.

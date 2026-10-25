@@ -72,21 +72,87 @@ function Test-BorcNotClonedError {
   $false
 }
 
+# A verdict per app and recipe, from what borc can know without running any
+# recipe code: winget list for packages. A recipe's settings units are only
+# checked by borc apply, so a recipe whose packages are all there "may be applied".
 function Show-BorcPreviewApps {
   param([Parameter(Mandatory)] $Plan)
   if (-not $Plan.Config) { return }
-  foreach ($app in $Plan.Config.Apps) {
-    if ($app.Kind -eq 'recipe') { continue }
-    $state = if (Test-BorcPackageInstalled -Id $app.Id) { 'installed' } else { 'would be installed' }
-    Write-BorcLog -Message "  $($app.Kind) $($app.Id): $state"
+  $rows = @(
+    foreach ($app in $Plan.Config.Apps) { if ($app.Kind -ne 'recipe') { Get-BorcPlainVerdict -App $app } }
+    $rebootFirst = @($Plan.Order | Where-Object { $Plan.Recipes[$_].Reboot }) + @($Plan.Order | Where-Object { -not $Plan.Recipes[$_].Reboot })
+    foreach ($id in $rebootFirst) { Get-BorcRecipeVerdict -Plan $Plan -Id $id }
+  )
+  if ($rows.Count -eq 0) { Write-BorcLog -Message '  borc.yaml lists no app.'; return }
+  $width = ($rows | ForEach-Object { $_.Id.Length } | Measure-Object -Maximum).Maximum
+  $colors = @{ 'installed' = 'Green'; 'in place' = 'Green'; 'would be installed' = 'Yellow'; 'would be applied' = 'Yellow' }
+  $previousKind = $null
+  foreach ($row in $rows) {
+    if ($previousKind -and $previousKind -ne 'recipe' -and $row.Kind -eq 'recipe') { Write-BorcPreviewLine -Text '' }
+    $previousKind = $row.Kind
+    $verdict = $row.Verdict + $row.Note
+    Write-BorcPreviewLine -Text ('  {0,-7} {1}  {2}' -f $row.Kind, $row.Id.PadRight($width), $verdict) -Color $colors[$row.Verdict]
+    foreach ($detail in $row.Details) { Write-BorcPreviewLine -Text "          $detail" }
   }
-  foreach ($id in $Plan.Order) {
-    $note = if ($Plan.Recipes[$id].Reboot) { ' (runs first, may need a restart)' } else { '' }
-    Write-BorcLog -Message "  recipe ${id}: would be applied$note"
+  Write-BorcPreviewSummary -Rows $rows
+}
+
+function Write-BorcPreviewLine {
+  param([Parameter(Mandatory)] [AllowEmptyString()] [string] $Text, [object] $Color)
+  if ($Color) { Write-BorcConsole -Text $Text -Color $Color } else { Write-BorcConsole -Text $Text }
+  Add-BorcLogLine -Line $Text
+}
+
+function Write-BorcPreviewSummary {
+  param([Parameter(Mandatory)] [object[]] $Rows)
+  $would = @($Rows | Where-Object Verdict -Like 'would be *').Count
+  $may = @($Rows | Where-Object Verdict -EQ 'may be applied').Count
+  $inPlace = @($Rows | Where-Object Verdict -In 'installed', 'in place').Count
+  Write-BorcPreviewLine -Text ''
+  Write-BorcPreviewLine -Text "  $would would be installed or applied, $may may be applied, $inPlace in place."
+  if ($may -gt 0) {
+    Write-BorcPreviewLine -Text '  "may be applied": no package is missing, but its settings are only'
+    Write-BorcPreviewLine -Text '  checked when borc apply runs.'
   }
-  if ($Plan.Errors.Count -eq 0) {
-    foreach ($message in (New-BorcRunDocuments -Plan $Plan).Dropped) { Write-BorcLog -Message "  $message" }
+}
+
+function Get-BorcPlainVerdict {
+  param([Parameter(Mandatory)] $App)
+  $verdict = if (Test-BorcPackageInstalled -Id $App.Id) { 'installed' } else { 'would be installed' }
+  [pscustomobject]@{ Kind = $App.Kind; Id = $App.Id; Verdict = $verdict; Note = ''; Details = @() }
+}
+
+function Get-BorcRecipeVerdict {
+  param([Parameter(Mandatory)] $Plan, [Parameter(Mandatory)] [string] $Id)
+  $recipe = $Plan.Recipes[$Id]
+  $app = $Plan.Config.Apps | Where-Object { $_.Kind -eq 'recipe' -and $_.Id -eq $Id } | Select-Object -First 1
+  $parameters = if ($app) { $app.Parameters } else { [ordered]@{} }
+  $dropped = [System.Collections.Generic.List[string]]::new()
+  $units = @(ConvertTo-BorcRecipeUnits -Recipe $recipe -Parameters $parameters -Dropped $dropped)
+  $packages = @($units | Where-Object { $_['type'] -eq $script:WingetPackageType })
+  $missing = @($packages | Where-Object { -not (Test-BorcPackageInstalled -Id "$($_['properties']['id'])") } | ForEach-Object { "$($_['properties']['id'])" })
+  $settings = $units.Count - $packages.Count
+
+  $verdict = if ($missing.Count -gt 0) { 'would be applied' } elseif ($settings -gt 0) { 'may be applied' } else { 'in place' }
+  $note = if ($recipe.Reboot) { ' (runs first, may need a restart)' } else { '' }
+  [pscustomobject]@{
+    Kind = 'recipe'; Id = $Id; Verdict = $verdict; Note = $note
+    Details = @(Format-BorcRecipeDetails -Packages $packages.Count -Missing $missing -Settings $settings -Dropped @($dropped))
   }
+}
+
+# "packages: 1 of 1 installed" and "settings: 2 units, not checked; 1 skipped (...)".
+function Format-BorcRecipeDetails {
+  param([int] $Packages, [string[]] $Missing = @(), [int] $Settings, [string[]] $Dropped = @())
+  $packageText = if ($Packages -eq 0) { 'packages: none' } else { "packages: $($Packages - $Missing.Count) of $Packages installed" }
+  if ($Missing.Count -gt 0) { $packageText += " ($($Missing -join ', '))" }
+  $reasons = @($Dropped | ForEach-Object { if ($_ -match 'no value for (.+)$') { "no value for $($Matches[1])" } } | Select-Object -Unique)
+  $skipped = if ($Dropped.Count -gt 0) { "$($Dropped.Count) skipped ($($reasons -join '; '))" } else { '' }
+  if ($Settings -eq 0 -and -not $skipped) { return "$packageText, no settings" }
+  $packageText
+  $settingsText = if ($Settings -eq 0) { 'settings: none to run' } else { "settings: $Settings $(if ($Settings -eq 1) { 'unit' } else { 'units' }), not checked" }
+  if ($skipped) { $settingsText += "; $skipped" }
+  $settingsText
 }
 
 function Show-BorcPreviewSecrets {
