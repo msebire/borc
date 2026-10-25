@@ -4,6 +4,52 @@ Latest report on top.
 
 ---
 
+## Step 17: reminder of uncommitted changes at terminal start (2026-10-25)
+
+### Done
+
+- **`src/profile.ps1`** runs at each PowerShell 7 start. When the config
+  repo has something left to do, it prints one dark-yellow line, for
+  example "borc: 3 uncommitted changes, 1 commit not pushed in D:\settings
+  (git -C D:\settings status)". It counts:
+  - modified and untracked files, `.gitignore` respected;
+  - commits not pushed, as of the last fetch;
+  - a branch that was never pushed.
+
+  It is silent when everything is clean, when the folder is not a Git repo,
+  or when Git is missing.
+- **One `git status`** with `--no-optional-locks`, about 80 ms (135 ms the
+  first time), measured on the borc repo.
+- **Profile block:** it now loads `src/profile.ps1`, which loads the
+  completion and runs the check. `self-update` delivers the block change; the
+  profile block test now copies both files, and a new test checks the warning
+  from a real repo with a change and an unpushed commit.
+- **Tests:** `tests/Status.Tests.ps1` runs on temporary repos (clean,
+  modified and untracked, ignored, unpushed, never pushed, not a repo).
+- **Docs:** `getting-started.md` (daily workflow), `design.md` and
+  `CHANGELOG.md`.
+
+### Assumptions
+
+- **No fetch at start-up:** it would need the network. "Not pushed" is as of
+  the last fetch or `borc apply`.
+- **`NO_COLOR`** turns the line's colour off, like everything else.
+
+### Questions
+
+- None.
+
+### Deviations
+
+- Beyond the spec: added at the maintainer's request.
+
+### To verify
+
+- The start time on the real config repo, which holds app settings and may
+  be larger than the borc repo.
+
+---
+
 ## Step 16: a Result at the end of every run (2026-10-25)
 
 ### Done

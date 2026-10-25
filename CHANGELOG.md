@@ -40,6 +40,8 @@ The version number is chosen when the release is cut.
   says what was checked, and counts the verdicts. `--what-if --check` also
   tests every recipe unit with `winget configure test`, for a definite
   verdict per recipe.
+- A one-line reminder in each new PowerShell 7 terminal when the config repo has
+  uncommitted changes or commits not pushed.
 - Tab completion for `borc` in PowerShell 7: commands, options, recipes, the
   apps `borc.yaml` lists, and winget IDs.
 - A `Result:` at the end of `borc apply` and `borc apply --what-if`: whether

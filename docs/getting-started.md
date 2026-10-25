@@ -166,6 +166,17 @@ on Tab completion for `borc` (see [commands](commands.md#tab-completion)).
 `borc apply` refuses to pull while tracked files have uncommitted changes, so
 it never mixes incoming changes with yours. Commit or discard them first.
 
+Each new PowerShell 7 terminal reminds you when something is left to do, with
+one dimmed line, and says nothing otherwise:
+
+```text
+borc: 3 uncommitted changes, 1 commit not pushed in D:\settings (git -C D:\settings status)
+```
+
+It counts modified and new files (your `.gitignore` still applies), commits
+not pushed as of the last fetch, and a branch that was never pushed. It adds
+about a tenth of a second to the terminal start.
+
 To see what `borc apply` would do without changing anything, run
 `borc apply --what-if`.
 

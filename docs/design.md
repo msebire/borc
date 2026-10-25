@@ -176,6 +176,20 @@ they rerun the installer. The rewrite stays inside the markers and is skipped
 when nothing changed. The refresh runs in a child process from the updated
 engine, because the process doing the pull still holds the old code.
 
+### A reminder at terminal start, from the engine
+
+The config repo is the settings folder, so apps change it behind the user's
+back, and a change only reaches another machine once it is committed and
+pushed. A new terminal is a natural moment to be reminded. The check is one
+`git status` (about a tenth of a second), with `--no-optional-locks` so it
+never blocks Git running elsewhere, and it prints nothing when there is
+nothing to do. It counts untracked files too, because a new settings file is
+exactly the "commit this or ignore it?" decision to notice.
+
+The profile block only loads `src/profile.ps1` from the engine. That file
+holds what happens at terminal start (this check, Tab completion), so it can
+change with `self-update` without rewriting the user's profile.
+
 ### Tab completion inside the shell
 
 The completer runs on every Tab, so it lives in the shell itself, loaded

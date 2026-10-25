@@ -61,10 +61,10 @@ Describe 'Profile block behaviour' {
     Set-Content -Path (Join-Path $script:Scripts 'b.ps1') -Value 'throw "broken"'
     Set-Content -Path (Join-Path $script:Scripts 'c.ps1') -Value 'function Get-BorcTestC { "c" }'
     Set-Content -Path (Join-Path $script:Folder 'profile.ps1') -Value $script:Block
-    # The block loads completion from the engine clone in LOCALAPPDATA.
+    # The block loads profile.ps1 (and through it completion.ps1) from the engine clone in LOCALAPPDATA.
     $engineSrc = Join-Path $script:Folder 'localappdata\borc\engine\src'
     New-Item -ItemType Directory -Path $engineSrc -Force | Out-Null
-    Copy-Item -LiteralPath (Join-Path $script:RepoRoot 'src\completion.ps1') -Destination $engineSrc
+    Copy-Item -LiteralPath (Join-Path $script:RepoRoot 'src\profile.ps1'), (Join-Path $script:RepoRoot 'src\completion.ps1') -Destination $engineSrc
   }
   AfterAll {
     Remove-Item -LiteralPath $script:Folder -Recurse -Force
@@ -90,5 +90,26 @@ Get-BorcTestC
       'c'
       (Join-Path $script:Folder 'home')
       'self-update')
+    }
+
+  It 'warns once at start-up about uncommitted changes and commits not pushed' {
+    $settings = Join-Path $script:Folder 'settings'
+    $git = @('-c', 'user.name=borc-test', '-c', 'user.email=borc-test@example.invalid', '-c', 'init.defaultBranch=main', '-c', 'core.autocrlf=false')
+    git @git init --quiet --bare (Join-Path $script:Folder 'remote.git')
+    git @git init --quiet $settings
+    git @git -C $settings remote add origin (Join-Path $script:Folder 'remote.git')
+    git @git -C $settings add -A
+    git @git -C $settings commit --quiet -m seed
+    git @git -C $settings push --quiet -u origin main 2>$null
+    git @git -C $settings commit --quiet --allow-empty -m 'not pushed'
+    Set-Content -Path (Join-Path $settings 'new-setting.txt') -Value 'x'
+    $command = @"
+`$env:BORC_SETTINGS = '$settings'
+`$env:LOCALAPPDATA = '$script:Folder\localappdata'
+`$env:NO_COLOR = '1'
+. '$script:Folder\profile.ps1' 3>`$null 6>&1 | Where-Object { "`$_" -like 'borc:*' } | ForEach-Object { "`$_" }
+"@
+    $output = @(pwsh -NoProfile -NonInteractive -Command $command)
+    $output | Should -Be @("borc: 1 uncommitted change, 1 commit not pushed in $settings (git -C $settings status)")
   }
 }
