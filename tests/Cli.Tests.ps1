@@ -103,6 +103,7 @@ Describe 'Commands with winget mocked' {
         Mock Write-Host {}
         Mock Sync-BorcRecipeRepo {}
         Mock Show-BorcUpdateNotice {}
+        Mock Invoke-BorcWingetQuiet { [pscustomobject]@{ ExitCode = 1; Output = @() } }
         Mock Test-BorcStoredSecret { $true }
         Mock Test-BorcRestartPending { $false }
         $script:Configured = [System.Collections.Generic.List[string]]::new()
@@ -114,6 +115,8 @@ Describe 'Commands with winget mocked' {
         $script:Configured[1] | Should -Match 'winget: Git.Git'
         $script:Configured[1] | Should -Not -Match 'NPM_TOKEN:|borc:'
         Should -Invoke Invoke-BorcWinget -Times 2 -Exactly -ParameterFilter { $Arguments[0] -eq 'configure' -and '--accept-configuration-agreements' -in $Arguments }
+        Should -Invoke Write-Host -ParameterFilter { $Object -eq 'Result: done; nothing new was pulled or installed.' }
+        Should -Invoke Write-Host -ParameterFilter { $Object -match '^  recipes:\s+5 run; winget does not say which of their settings changed$' }
       }
     }
 
@@ -124,6 +127,7 @@ Describe 'Commands with winget mocked' {
         Mock Write-Host {}
         Mock Sync-BorcRecipeRepo {}
         Mock Show-BorcUpdateNotice {}
+        Mock Invoke-BorcWingetQuiet { [pscustomobject]@{ ExitCode = 1; Output = @() } }
         Mock Test-BorcStoredSecret { $true }
         $script:RunCount = 0
         Mock Invoke-BorcWinget { $script:RunCount++; 0 }
@@ -141,6 +145,7 @@ Describe 'Commands with winget mocked' {
         Mock Write-Host {}
         Mock Sync-BorcRecipeRepo {}
         Mock Show-BorcUpdateNotice {}
+        Mock Invoke-BorcWingetQuiet { [pscustomobject]@{ ExitCode = 1; Output = @() } }
         Mock Test-BorcStoredSecret { $true }
         Mock Test-BorcRestartPending { $false }
         Mock Invoke-BorcWinget { -1978286078 }
@@ -156,6 +161,7 @@ Describe 'Commands with winget mocked' {
         Mock Write-Host {}
         Mock Sync-BorcRecipeRepo {}
         Mock Show-BorcUpdateNotice {}
+        Mock Invoke-BorcWingetQuiet { [pscustomobject]@{ ExitCode = 1; Output = @() } }
         Mock Test-BorcStoredSecret { $false }
         Mock Read-BorcSecretInput { ConvertTo-SecureString 'x' -AsPlainText -Force }
         Mock Set-BorcStoredSecret {}
@@ -177,6 +183,7 @@ Describe 'Commands with winget mocked' {
         Mock Write-Host { $script:Shown.Add("$Object") }
         Mock Sync-BorcRecipeRepo {}
         Mock Show-BorcUpdateNotice {}
+        Mock Invoke-BorcWingetQuiet { [pscustomobject]@{ ExitCode = 1; Output = @() } }
         Mock Invoke-BorcWinget { 0 }
         Mock Read-BorcSecretInput {}
         Invoke-Borc -Arguments @('apply') | Should -Be 1
@@ -208,6 +215,7 @@ Describe 'Commands with winget mocked' {
         Mock Write-Host { $script:Shown.Add("$Object") }
         Mock Sync-BorcRecipeRepo {}
         Mock Show-BorcUpdateNotice {}
+        Mock Invoke-BorcWingetQuiet { [pscustomobject]@{ ExitCode = 1; Output = @() } }
         Mock Test-BorcStoredSecret { $true }
         Mock Test-BorcRestartPending { $false }
         $script:Count = 0
@@ -269,6 +277,7 @@ Describe 'Commands with winget mocked' {
         $text | Should -Match '  recipe  recipes/npm-auth\s+may be applied\n\s+packages: none\n\s+settings: 1 unit, not checked'
         $text | Should -Match '  4 would be installed or applied, 2 may be applied, 1 in place\.'
         $text | Should -Match '"may be applied": no package is missing'
+        $text | Should -Match 'Result: there are changes to apply\.\n  pull:\s+recipe repo recipes would be cloned\n  apps and recipes: 4 would be installed or applied, 2 may be applied, 1 in place\n  secrets:\s+1 would be asked for \(NPM_TOKEN\)'
         # The reboot recipe is listed first, as it runs first.
         $text.IndexOf('recipe  recipes/wsl ') | Should -BeLessThan $text.IndexOf('recipe  recipes/node ')
         $text | Should -Match '==> \[3/4\] Secrets that would be asked for'

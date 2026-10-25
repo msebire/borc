@@ -14,7 +14,9 @@ function Start-BorcLog {
 
 function Stop-BorcLog {
   if ($script:BorcLogPath) {
-    Write-Host "Log: $script:BorcLogPath"
+    # A footnote: set apart and dimmed, so the result above stays the last thing read.
+    Write-BorcConsole -Text ''
+    Write-BorcConsole -Text "Log: $script:BorcLogPath" -Color DarkGray
   }
   $script:BorcLogPath = $null
 }

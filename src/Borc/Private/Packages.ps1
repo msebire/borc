@@ -1,7 +1,28 @@
 ﻿# winget package operations used by the commands. All go through Invoke-BorcWinget.
 
+# One winget list of everything installed, so checking many packages costs one
+# call. Only a hit is trusted: a package missing from it (Store apps are often
+# listed under another ID) is still asked about on its own.
+$script:BorcInstalledList = $null
+
+function Update-BorcInstalledList {
+  $result = Invoke-BorcWingetQuiet -Arguments @('list', '--accept-source-agreements', '--disable-interactivity')
+  $script:BorcInstalledList = if ($result.ExitCode -eq 0) { @($result.Output) } else { @() }
+}
+
+function Clear-BorcInstalledList {
+  $script:BorcInstalledList = $null
+}
+
+function Get-BorcListedVersion {
+  param([Parameter(Mandatory)] [string] $Id)
+  if (-not $script:BorcInstalledList) { return $null }
+  ConvertFrom-WingetListVersion -Id $Id -Lines $script:BorcInstalledList
+}
+
 function Test-BorcPackageInstalled {
   param([Parameter(Mandatory)] [string] $Id)
+  if (Get-BorcListedVersion -Id $Id) { return $true }
   $result = Invoke-BorcWingetQuiet -Arguments @('list', '--id', $Id, '--exact', '--accept-source-agreements', '--disable-interactivity')
   $result.ExitCode -eq 0
 }
@@ -9,6 +30,8 @@ function Test-BorcPackageInstalled {
 # The installed version of a package, or $null when it is not installed.
 function Get-BorcInstalledVersion {
   param([Parameter(Mandatory)] [string] $Id)
+  $listed = Get-BorcListedVersion -Id $Id
+  if ($listed) { return $listed }
   $result = Invoke-BorcWingetQuiet -Arguments @('list', '--id', $Id, '--exact', '--accept-source-agreements', '--disable-interactivity')
   if ($result.ExitCode -ne 0) { return $null }
   $version = ConvertFrom-WingetListVersion -Id $Id -Lines $result.Output

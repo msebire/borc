@@ -5,6 +5,7 @@
 $script:BorcSteps = [System.Collections.Generic.List[object]]::new()
 $script:BorcStepTotal = 0
 $script:BorcCurrentStep = $null
+$script:BorcResult = $null
 
 # Colours are for the console only, and NO_COLOR turns them off. The text
 # always says the result too, so nothing depends on the colour alone.
@@ -28,6 +29,18 @@ function Start-BorcSteps {
   $script:BorcSteps = [System.Collections.Generic.List[object]]::new()
   $script:BorcStepTotal = $Total
   $script:BorcCurrentStep = $null
+  $script:BorcResult = $null
+}
+
+# What the run did or would do, shown under the steps: a headline, then one
+# line per topic. The last thing read answers "is there anything to apply?".
+function Set-BorcResult {
+  param(
+    [Parameter(Mandatory)] [string] $Headline,
+    [System.Collections.IDictionary] $Details = [ordered]@{},
+    [string] $Color
+  )
+  $script:BorcResult = [pscustomobject]@{ Headline = $Headline; Details = $Details; Color = $Color }
 }
 
 # Ends the previous step, if any, then shows the header of the next one.
@@ -71,7 +84,25 @@ function Write-BorcSummary {
     Write-BorcConsole -Text $line
     Add-BorcLogLine -Line $line
   }
+  Write-BorcResult
   $script:BorcSteps = [System.Collections.Generic.List[object]]::new()
+}
+
+function Write-BorcResult {
+  $result = $script:BorcResult
+  if (-not $result) { return }
+  Write-BorcConsole -Text ''
+  Add-BorcLogLine -Line ''
+  $headline = "Result: $($result.Headline)"
+  if ($result.Color) { Write-BorcConsole -Text $headline -Color $result.Color } else { Write-BorcConsole -Text $headline }
+  Add-BorcLogLine -Line $headline
+  $width = ($result.Details.Keys | ForEach-Object { "$_".Length } | Measure-Object -Maximum).Maximum
+  foreach ($label in $result.Details.Keys) {
+    $line = '  {0} {1}' -f "${label}:".PadRight($width + 1), $result.Details[$label]
+    Write-BorcConsole -Text $line
+    Add-BorcLogLine -Line $line
+  }
+  $script:BorcResult = $null
 }
 
 # Ends the steps of a command from its exit code, then shows the summary.

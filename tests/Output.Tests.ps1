@@ -82,6 +82,46 @@ Describe 'Steps and summary' {
   }
 }
 
+Describe 'Result and log line' {
+  BeforeEach { $script:SavedNoColor = $env:NO_COLOR; $env:NO_COLOR = $null }
+  AfterEach { $env:NO_COLOR = $script:SavedNoColor }
+
+  It 'shows the result under the steps, with aligned details, then the log path set apart in gray' {
+    $folder = New-TestFolder
+    try {
+      $lines = Get-HostLines {
+        param($F)
+        $null = Start-BorcLog -Directory $F -Command 'test'
+        Start-BorcSteps -Total 1
+        Start-BorcStep -Name 'Only'
+        Set-BorcResult -Headline 'there are changes to apply.' -Details ([ordered]@{ pull = 'nothing new'; 'apps and recipes' = '1 would be installed' }) -Color Yellow
+        Complete-BorcRun -ExitCode 0
+        Stop-BorcLog
+      } -Parameters @{ F = $folder }
+      $texts = @($lines.Text)
+      $at = [array]::IndexOf($texts, 'Result: there are changes to apply.')
+      $at | Should -BeGreaterThan ([array]::IndexOf($texts, 'Summary:'))
+      $texts[$at - 1] | Should -Be ''
+      $lines[$at].Color | Should -Be 'Yellow'
+      $texts[$at + 1] | Should -Be '  pull:             nothing new'
+      $texts[$at + 2] | Should -Be '  apps and recipes: 1 would be installed'
+      $texts[-2] | Should -Be ''
+      $texts[-1] | Should -Match '^Log: '
+      $lines[-1].Color | Should -Be 'DarkGray'
+    } finally {
+      Remove-Item -LiteralPath $folder -Recurse -Force
+    }
+  }
+
+  It 'shows a result once, and none when a command sets none' {
+    $lines = Get-HostLines {
+      Start-BorcSteps -Total 1; Start-BorcStep -Name 'A'; Set-BorcResult -Headline 'x.'; Complete-BorcRun -ExitCode 0
+      Start-BorcSteps -Total 1; Start-BorcStep -Name 'B'; Complete-BorcRun -ExitCode 0
+    }
+    @($lines.Text | Where-Object { $_ -like 'Result:*' }).Count | Should -Be 1
+  }
+}
+
 Describe 'External commands' {
   BeforeEach { $script:SavedNoColor = $env:NO_COLOR; $env:NO_COLOR = $null }
   AfterEach { $env:NO_COLOR = $script:SavedNoColor }

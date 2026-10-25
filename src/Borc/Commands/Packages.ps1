@@ -80,7 +80,7 @@ function Install-BorcRecipe {
   $recipe = $plan.Recipes[$Id]
   $secrets = [ordered]@{}
   foreach ($name in $recipe.Secrets) { $secrets[$name] = $plan.Config.Secrets[$name] }
-  Request-BorcMissingSecrets -Secrets $secrets
+  $null = Request-BorcMissingSecrets -Secrets $secrets
 
   Start-BorcStep -Name "Installing $Id"
   $single = @(New-BorcSingleDocuments -Plan $plan -Ids @($Id))[0]

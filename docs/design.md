@@ -212,6 +212,24 @@ the result too: the output stays readable in the log, when pasted into an
 issue, and without colour. Tool output is still shown in full, because borc
 shows winget's errors as they come.
 
+### Every run ends with its result
+
+Step statuses only say that each step worked. After a long run, the
+question is whether anything changed, or with `--what-if`, whether anything
+would. So the summary ends with a `Result:` line that answers it, then the
+detail.
+
+For `apply`, borc only reports what it knows for certain: commits pulled,
+packages newly installed or at another version (from `winget list` before and
+after), and secrets stored. winget prints the same "Unit successfully
+applied." for a unit it changed and for one already in place. Its verbose
+logs do record each unit's test, but in an internal format, without unit
+names, and split across processes for elevated units. borc does not build on
+that, and says that recipes were run rather than claiming they changed.
+
+The log path is a footnote, set apart and dimmed, so the result stays the
+last thing read.
+
 ### --what-if says what it checked
 
 Knowing whether a recipe's settings are in place means running its

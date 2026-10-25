@@ -26,8 +26,15 @@ installer does the same:
 Summary:
   done     [1/5] Pulling the config repo (D:\settings)  1s
   done     [2/5] Pulling recipe repos                   3s
-  failed   [3/5] Checking borc.yaml and the recipes     0s
-  Stopped after step 3 of 5.
+  done     [3/5] Checking borc.yaml and the recipes     0s
+  done     [4/5] Secrets                                0s
+  done     [5/5] Applying the configuration             1m 12s
+
+Result: done, with changes.
+  pulled:    config repo 2 commits pulled
+  installed: Microsoft.VisualStudioCode
+  recipes:   4 run; winget does not say which of their settings changed
+
 Log: C:\Users\you\AppData\Local\borc\logs\20261024-101500-123-apply.log
 ```
 
@@ -41,6 +48,35 @@ Log: C:\Users\you\AppData\Local\borc\logs\20261024-101500-123-apply.log
 - The summary lists every step reached with `done`, `failed` or `restart`
   (Windows needs a restart) and its duration. When a command stops early, the
   last line says after which step.
+- **`Result:`** answers what the run did, or, with `--what-if`, what it would
+  do. Its first line is the answer; the lines below give the detail.
+- The log path comes last, after a blank line, in dark gray.
+
+### The result of `borc apply`
+
+| Result | When |
+| --- | --- |
+| `done, with changes.` | something was pulled, installed, changed version, or a secret was stored |
+| `done; nothing new was pulled or installed.` | the run worked and none of that happened |
+| `Windows needs a restart. ...` | a recipe left Windows waiting for a restart |
+| `winget reported a failure; ...` | a unit failed; winget's errors are above |
+| `nothing was applied: ...` | borc stopped before running anything: local changes, or a problem in `borc.yaml` or a recipe |
+
+- **`installed` and `version changed`** come from `winget list`, read before
+  and after the run.
+- **Recipes are only reported as run.** winget prints "Unit successfully
+  applied." both for a unit it changed and for one already in place, so borc
+  cannot tell which recipe settings changed.
+  `borc apply --what-if --check` before the run shows what would change.
+
+### The result of `borc apply --what-if`
+
+| Result | When |
+| --- | --- |
+| `there are changes to apply.` | the pull would bring commits or clone a repo, something would be installed or applied, or a secret would be asked for |
+| `probably nothing to apply; N recipes may be applied. Run with --check to know.` | only `may be applied` verdicts remain |
+| `probably nothing to apply; N recipes could not be fully tested.` | the same with `--check`, when winget could not test some units |
+| `nothing to apply.` | everything is in place and nothing would be pulled or asked |
 
 In the console, step headers are cyan, `done` is green, `failed` and errors
 are red, warnings and `restart` are yellow, and tool output is dark gray. The

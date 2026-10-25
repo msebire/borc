@@ -42,6 +42,10 @@ The version number is chosen when the release is cut.
   verdict per recipe.
 - Tab completion for `borc` in PowerShell 7: commands, options, recipes, the
   apps `borc.yaml` lists, and winget IDs.
+- A `Result:` at the end of `borc apply` and `borc apply --what-if`: whether
+  there is (or was) anything to apply, with what was pulled, installed and
+  asked for. The log path follows, dimmed.
+- One `winget list` call for all packages, instead of one per package.
 - Readable output: numbered steps separated by blank lines, a start and an
   end line around every `git` and `winget` command, a summary with each
   step's result and duration, and colours (`NO_COLOR` turns them off), in

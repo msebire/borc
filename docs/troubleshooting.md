@@ -3,7 +3,7 @@
 ## Where the log is
 
 Every borc command except `help` writes a log to `%LOCALAPPDATA%\borc\logs`
-and prints its path at the end:
+and prints its path on the last line, in dark gray:
 
 ```
 Log: C:\Users\you\AppData\Local\borc\logs\20261024-101500-123-apply.log

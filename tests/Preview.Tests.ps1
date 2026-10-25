@@ -150,6 +150,87 @@ Describe 'Checked recipe verdicts' {
   }
 }
 
+Describe 'what-if result' {
+  It 'says <Expected> for <Case>' -ForEach @(
+    @{ Case = 'a pull to bring'; Pulls = @{ 'config repo' = '2 commits to pull' }; Verdicts = @('in place'); Secrets = @(); Checked = $false; Expected = 'there are changes to apply.' }
+    @{ Case = 'an app to install'; Pulls = @{}; Verdicts = @('would be installed', 'in place'); Secrets = @(); Checked = $false; Expected = 'there are changes to apply.' }
+    @{ Case = 'a secret to ask'; Pulls = @{}; Verdicts = @('in place'); Secrets = @('NPM_TOKEN'); Checked = $false; Expected = 'there are changes to apply.' }
+    @{ Case = 'only "may be applied"'; Pulls = @{}; Verdicts = @('may be applied', 'installed'); Secrets = @(); Checked = $false; Expected = 'probably nothing to apply; 1 recipe may be applied. Run with --check to know.' }
+    @{ Case = 'units --check could not test'; Pulls = @{}; Verdicts = @('may be applied', 'may be applied'); Secrets = @(); Checked = $true; Expected = 'probably nothing to apply; 2 recipes could not be fully tested.' }
+    @{ Case = 'everything in place'; Pulls = @{}; Verdicts = @('installed', 'in place'); Secrets = @(); Checked = $false; Expected = 'nothing to apply.' }
+  ) {
+    $result = InModuleScope Borc -Parameters @{ P = $Pulls; V = $Verdicts; S = $Secrets; C = $Checked } {
+      param($P, $V, $S, $C)
+      $pulls = [ordered]@{}; foreach ($key in $P.Keys) { $pulls[$key] = $P[$key] }
+      $rows = @($V | ForEach-Object { [pscustomobject]@{ Verdict = $_ } })
+      Set-BorcPreviewResult -Pulls $pulls -Rows $rows -Secrets $S -Checked:$C
+      $script:BorcResult
+    }
+    $result.Headline | Should -Be $Expected
+  }
+
+  It 'lists the pulls, the counts and the secrets' {
+    $result = InModuleScope Borc {
+      Set-BorcPreviewResult -Pulls ([ordered]@{ 'config repo' = '2 commits to pull'; 'recipe repo acme' = 'would be cloned' }) -Rows @([pscustomobject]@{ Verdict = 'would be applied' }) -Secrets @('NPM_TOKEN')
+      $script:BorcResult
+    }
+    $result.Details['pull'] | Should -Be 'config repo 2 commits to pull, recipe repo acme would be cloned'
+    $result.Details['apps and recipes'] | Should -Be '1 would be installed or applied, 0 may be applied, 0 in place'
+    $result.Details['secrets'] | Should -Be '1 would be asked for (NPM_TOKEN)'
+  }
+}
+
+Describe 'apply result' {
+  It 'names what was installed and what changed version, and says recipes are only run' {
+    $result = InModuleScope Borc {
+      $before = [ordered]@{ 'Git.Git' = '2.55.0'; 'jqlang.jq' = $null; 'OpenJS.NodeJS.LTS' = '22.1.0' }
+      $after = [ordered]@{ 'Git.Git' = '2.56.0'; 'jqlang.jq' = '1.7.1'; 'OpenJS.NodeJS.LTS' = '22.1.0' }
+      Set-BorcApplyResult -ExitCode 0 -Pulls ([ordered]@{ 'config repo' = '1 commit pulled' }) -Before $before -After $after -Recipes 3 -Secrets @('NPM_TOKEN')
+      $script:BorcResult
+    }
+    $result.Headline | Should -Be 'done, with changes.'
+    $result.Details['pulled'] | Should -Be 'config repo 1 commit pulled'
+    $result.Details['installed'] | Should -Be 'jqlang.jq'
+    $result.Details['version changed'] | Should -Be 'Git.Git (2.55.0 -> 2.56.0)'
+    $result.Details['recipes'] | Should -Be '3 run; winget does not say which of their settings changed'
+    $result.Details['secrets'] | Should -Be 'stored NPM_TOKEN'
+  }
+
+  It 'says <Expected> for exit code <Code>' -ForEach @(
+    @{ Code = 0; Expected = 'done; nothing new was pulled or installed.' }
+    @{ Code = 3010; Expected = 'Windows needs a restart. Restart, then run borc apply again.' }
+    @{ Code = 1; Expected = 'winget reported a failure; its errors are shown above.' }
+  ) {
+    $result = InModuleScope Borc -Parameters @{ C = $Code } {
+      param($C)
+      Set-BorcApplyResult -ExitCode $C -Pulls ([ordered]@{}) -Before ([ordered]@{ a = '1' }) -After ([ordered]@{ a = '1' }) -Recipes 0
+      $script:BorcResult
+    }
+    $result.Headline | Should -Be $Expected
+    $result.Details.Contains('recipes') | Should -BeFalse
+  }
+}
+
+Describe 'One winget list for many packages' {
+  It 'answers from one list call, and asks about a single ID only when it is not in the list' {
+    InModuleScope Borc {
+      $script:Calls = [System.Collections.Generic.List[string]]::new()
+      Mock Invoke-BorcWingetQuiet {
+        $script:Calls.Add($Arguments -join ' ')
+        if ('--id' -notin $Arguments) { return [pscustomobject]@{ ExitCode = 0; Output = @('Name Id      Version Source', 'Git  Git.Git 2.56.0  winget') } }
+        [pscustomobject]@{ ExitCode = 1; Output = @() }
+      }
+      Update-BorcInstalledList
+      Test-BorcPackageInstalled -Id 'Git.Git' | Should -BeTrue
+      Get-BorcInstalledVersion -Id 'Git.Git' | Should -Be '2.56.0'
+      Test-BorcPackageInstalled -Id 'Some.Store.App' | Should -BeFalse
+      Clear-BorcInstalledList
+      @($script:Calls | Where-Object { $_ -like '*--id Git.Git*' }).Count | Should -Be 0
+      @($script:Calls | Where-Object { $_ -like '*--id Some.Store.App*' }).Count | Should -Be 1
+    }
+  }
+}
+
 Describe 'Verdict summary' {
   It 'counts the verdicts, and explains "may be applied" only when one is shown' {
     $lines = InModuleScope Borc {

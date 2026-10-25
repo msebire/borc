@@ -103,6 +103,7 @@ function Write-BorcPlanErrors {
   param([Parameter(Mandatory)] [string[]] $Errors)
   Write-BorcLog -Message 'borc.yaml or a recipe has problems; nothing was run:' -Level Error
   foreach ($message in $Errors) { Write-BorcLog -Message "  $message" }
+  Set-BorcResult -Headline 'nothing was applied: borc.yaml or a recipe has problems, listed above.' -Color Red
 }
 
 # winget, msstore or recipe, by the form of the argument.

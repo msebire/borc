@@ -4,6 +4,62 @@ Latest report on top.
 
 ---
 
+## Step 16: a Result at the end of every run (2026-10-25)
+
+### Done
+
+- **The summary ends with `Result:`**, a one-line answer and its detail,
+  then a blank line and the log path in dark gray.
+- **`--what-if` result:**
+  - the headline is "there are changes to apply", "probably nothing to
+    apply" (only `may be applied` left; with `--check`, units that could not
+    be tested), or "nothing to apply";
+  - the detail gives the pulls ("config repo 1 commit to pull", "recipe repo
+    acme would be cloned"), the verdict counts and the secrets that would be
+    asked for.
+- **`apply` result:**
+  - "done, with changes", "done; nothing new was pulled or installed",
+    restart needed, or winget failure;
+  - the detail gives the commits pulled per repo, the packages newly
+    installed or at another version (from `winget list` before and after),
+    the recipes run, and the secrets stored.
+  - A dirty working copy or a plan error gives "nothing was applied: ...".
+- **winget's output was probed** on harmless runs. It prints "Unit
+  successfully applied." both for a changed unit and for one already in
+  place. Its verbose logs record each test result, but without unit names,
+  in an internal format, and per process. borc reports recipes as run, and
+  says why.
+- **One `winget list` call** now answers for all packages, both in
+  `--what-if` and around `apply`. A package missing from it (Store apps can
+  show under another ID) is still asked about on its own. Redirected
+  `winget list` output is not truncated.
+- **Docs and tests:** `docs/commands.md` (both result tables),
+  `troubleshooting.md`, `design.md` and `CHANGELOG.md`. Tests cover the
+  layout, each headline, the details, the one-call list, and the results in
+  the command runs. The apply tests now mock `winget list`. 244 tests pass. A
+  `--what-if` on a throwaway repo with a pending commit read as expected.
+
+### Assumptions
+
+- **A pull counts as a change** to apply, even if the incoming commits do not
+  change what would be installed.
+- **"version changed"** covers both upgrades and downgrades: borc only
+  compares the versions.
+
+### Questions
+
+- None.
+
+### Deviations
+
+- Beyond the spec: added at the maintainer's request.
+
+### To verify
+
+- The `apply` result after a real run with something to install.
+
+---
+
 ## Step 15: Tab completion (2026-10-25)
 
 ### Done

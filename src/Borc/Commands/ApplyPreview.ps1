@@ -6,6 +6,7 @@ function Invoke-BorcApplyPreview {
   # The check of borc.yaml comes last, so a failure in the summary points at it.
   Start-BorcSteps -Total $(if ($Check) { 5 } else { 4 })
   Start-BorcStep -Name 'Fetching the config repo and recipe repos (no merge)'
+  $script:BorcPreviewPulls = [ordered]@{}
   $dirty = @(Get-BorcDirtyFiles -Path $Paths.Settings)
   if ($dirty.Count -gt 0) { Write-BorcLog -Message (Format-BorcDirtyMessage -Path $Paths.Settings -Files $dirty) -Level Warning }
 
@@ -15,7 +16,11 @@ function Invoke-BorcApplyPreview {
   foreach ($repo in $localConfig.Recipes) {
     $clone = Join-Path $Paths.Recipes $repo.Name
     if (Test-BorcGitRepo -Path $clone) { $refs[$clone] = Show-BorcIncoming -Path $clone -Label "recipe repo $($repo.Name)" }
-    else { $notCloned += $repo.Name; Write-BorcLog -Message "recipe repo $($repo.Name): not cloned yet; borc apply will clone $($repo.Url)." }
+    else {
+      $notCloned += $repo.Name
+      $script:BorcPreviewPulls["recipe repo $($repo.Name)"] = 'would be cloned'
+      Write-BorcLog -Message "recipe repo $($repo.Name): not cloned yet; borc apply will clone $($repo.Url)."
+    }
   }
 
   $plan = Get-BorcPlan -SettingsRoot $Paths.Settings -RecipesRoot $Paths.Recipes -ReadFile (New-BorcPreviewReader -Refs $refs)
@@ -27,20 +32,44 @@ function Invoke-BorcApplyPreview {
     else { $checks = Invoke-BorcRecipeCheck -Plan $plan }
   }
   Start-BorcStep -Name 'What would be installed'
-  Show-BorcPreviewApps -Plan $plan -Checks $checks
+  Update-BorcInstalledList
+  $rows = @(Show-BorcPreviewApps -Plan $plan -Checks $checks)
+  Clear-BorcInstalledList
   Start-BorcStep -Name 'Secrets that would be asked for'
-  Show-BorcPreviewSecrets -Plan $plan
+  $secrets = @(Show-BorcPreviewSecrets -Plan $plan)
   Start-BorcStep -Name 'Checking borc.yaml and the recipes'
   if ($errors.Count -gt 0) { Write-BorcPlanErrors -Errors $errors; return 1 }
   Write-BorcPlanCounts -Plan $plan
   Write-BorcLog -Message 'Nothing was changed (--what-if).'
+  Set-BorcPreviewResult -Pulls $script:BorcPreviewPulls -Rows $rows -Secrets $secrets -Checked:$Check
   0
+}
+
+# The answer to "is there anything to apply?", from the pulls, the verdicts
+# and the secrets.
+function Set-BorcPreviewResult {
+  param([System.Collections.IDictionary] $Pulls, [object[]] $Rows = @(), [string[]] $Secrets = @(), [switch] $Checked)
+  $would = @($Rows | Where-Object Verdict -Like 'would be *').Count
+  $may = @($Rows | Where-Object Verdict -EQ 'may be applied').Count
+  $inPlace = @($Rows | Where-Object Verdict -In 'installed', 'in place').Count
+  $changes = $Pulls.Count -gt 0 -or $would -gt 0 -or $Secrets.Count -gt 0
+  $details = [ordered]@{}
+  $details['pull'] = if ($Pulls.Count -gt 0) { @($Pulls.Keys | ForEach-Object { "$_ $($Pulls[$_])" }) -join ', ' } else { 'nothing new' }
+  $details['apps and recipes'] = "$would would be installed or applied, $may may be applied, $inPlace in place"
+  $details['secrets'] = if ($Secrets.Count -gt 0) { "$($Secrets.Count) would be asked for ($($Secrets -join ', '))" } else { 'none to ask for' }
+  $recipes = if ($may -eq 1) { '1 recipe' } else { "$may recipes" }
+  if ($changes) { Set-BorcResult -Headline 'there are changes to apply.' -Details $details -Color Yellow }
+  elseif ($may -gt 0 -and $Checked) { Set-BorcResult -Headline "probably nothing to apply; $recipes could not be fully tested." -Details $details }
+  elseif ($may -gt 0) { Set-BorcResult -Headline "probably nothing to apply; $recipes may be applied. Run with --check to know." -Details $details }
+  else { Set-BorcResult -Headline 'nothing to apply.' -Details $details -Color Green }
 }
 
 function Show-BorcIncoming {
   param([Parameter(Mandatory)] [string] $Path, [Parameter(Mandatory)] [string] $Label)
   $incoming = Get-BorcIncoming -Path $Path
-  if ($incoming.Commits.Count -eq 0) {
+  $count = $incoming.Commits.Count
+  if ($count -gt 0) { $script:BorcPreviewPulls[$Label] = "$count $(if ($count -eq 1) { 'commit' } else { 'commits' }) to pull" }
+  if ($count -eq 0) {
     Write-BorcLog -Message "${Label}: up to date."
   } else {
     Write-BorcLog -Message "${Label}: the pull would bring $($incoming.Commits.Count) commit(s):"
@@ -101,6 +130,7 @@ function Show-BorcPreviewApps {
     foreach ($detail in $row.Details) { Write-BorcPreviewLine -Text "          $detail" }
   }
   Write-BorcPreviewSummary -Rows $rows -Checked:($null -ne $Checks)
+  $rows
 }
 
 function Write-BorcPreviewLine {
@@ -186,6 +216,7 @@ function Show-BorcPreviewSecrets {
   $missing = @(Get-BorcMissingSecrets -Secrets $Plan.Config.Secrets)
   if ($missing.Count -eq 0) { Write-BorcLog -Message '  None: every declared secret is in Windows Credential Manager.'; return }
   foreach ($name in $missing) { Write-BorcLog -Message "  $name ($($Plan.Config.Secrets[$name]))" }
+  $missing
 }
 
 # With --check: the verdict from each unit's tested state.

@@ -68,7 +68,10 @@ function Format-BorcDirtyMessage {
 function Sync-BorcConfigRepo {
   param([Parameter(Mandatory)] [string] $Path)
   $dirty = @(Get-BorcDirtyFiles -Path $Path)
-  if ($dirty.Count -gt 0) { throw (Format-BorcDirtyMessage -Path $Path -Files $dirty) }
+  if ($dirty.Count -gt 0) {
+    Set-BorcResult -Headline 'nothing was applied: commit or discard the local changes listed above.' -Color Red
+    throw (Format-BorcDirtyMessage -Path $Path -Files $dirty)
+  }
   if (-not (Get-BorcUpstream -Path $Path)) {
     Write-BorcLog -Message "The branch $(Get-BorcCurrentBranch -Path $Path) has no upstream yet; using the local copy. Push it with git push -u origin <branch> when ready."
     return

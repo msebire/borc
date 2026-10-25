@@ -6,6 +6,7 @@ function Get-BorcMissingSecrets {
   @($Secrets.Keys | Where-Object { -not (Test-BorcStoredSecret -Name $_) })
 }
 
+# Asks for each missing secret and stores it. Returns the names it stored.
 function Request-BorcMissingSecrets {
   param([Parameter(Mandatory)] [System.Collections.IDictionary] $Secrets)
   $missing = @(Get-BorcMissingSecrets -Secrets $Secrets)
@@ -18,5 +19,6 @@ function Request-BorcMissingSecrets {
     if ($null -eq $value -or $value.Length -eq 0) { throw "No value given for the secret $name." }
     Set-BorcStoredSecret -Name $name -Value $value
     Write-BorcLog -Message "Stored $name in Windows Credential Manager as $script:BorcCredentialPrefix$name."
+    $name
   }
 }
