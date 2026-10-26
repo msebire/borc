@@ -4,6 +4,56 @@ Latest report on top.
 
 ---
 
+## Step 18: apply --no-pull (2026-10-26)
+
+### Done
+
+- **`borc apply --no-pull`** applies the config repo and the recipe repos as
+  they are:
+  - no dirty check and no pull, so uncommitted changes are applied too;
+  - no update notice;
+  - a recipe repo not cloned yet is still cloned, because its recipes could
+    not run otherwise;
+  - the steps say so, and the Result shows `pulled: skipped (--no-pull)`.
+- **`--what-if --no-pull`** previews the working copy: nothing is fetched,
+  and `borc.yaml` and the recipes are read from disk. It combines with
+  `--check`, and `apply --no-pull` with `--debug`.
+- **The tip:** when the pull is refused (local changes) or fails (diverged
+  branch, offline), the Result ends with "tip: borc apply --no-pull applies
+  your working copy as it is, without pulling". The refusal message itself
+  also says it.
+- **Tab completion** offers `--no-pull`.
+- **Docs:** the `apply` help page and `commands.md`, `troubleshooting.md`
+  ("borc apply refuses to pull"), `getting-started.md` (daily workflow),
+  `design.md` and `CHANGELOG.md`.
+- **Tests:** a dirty working copy applied with `--no-pull` without pulling;
+  the tip after a refusal and after a failed pull; `--what-if --no-pull`
+  reading an uncommitted change without fetching; the completion list.
+  253 tests pass.
+- **Checked by hand** on a throwaway repo: the refusal with its tip, and
+  `--what-if --no-pull` showing an uncommitted app as "would be installed".
+  A real `apply --no-pull` was not run, as it would run `winget configure`.
+
+### Assumptions
+
+- **Recipe repos are not pulled with `--no-pull` either,** which also makes
+  it work offline.
+
+### Questions
+
+- None.
+
+### Deviations
+
+- Beyond the spec, which always pulls: added at the maintainer's request.
+  Without the option, borc still refuses to pull over local changes.
+
+### To verify
+
+- A real `borc apply --no-pull` on the maintainer's config.
+
+---
+
 ## Step 17: reminder of uncommitted changes at terminal start (2026-10-25)
 
 ### Done

@@ -60,7 +60,7 @@ function Get-BorcCurrentBranch {
 function Format-BorcDirtyMessage {
   param([Parameter(Mandatory)] [string] $Path, [Parameter(Mandatory)] [string[]] $Files)
   $list = ($Files | ForEach-Object { "  $_" }) -join "`n"
-  "These tracked files in $Path have uncommitted changes:`n$list`nCommit or discard them, then run borc apply again. borc does not pull over local changes."
+  "These tracked files in $Path have uncommitted changes:`n$list`nCommit or discard them, then run borc apply again: borc does not pull over local changes.`nTo apply them as they are, without pulling, run borc apply --no-pull."
 }
 
 # Pulls the config repo. Refuses when tracked files have uncommitted changes.

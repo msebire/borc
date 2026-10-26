@@ -60,7 +60,7 @@ Log: C:\Users\you\AppData\Local\borc\logs\20261024-101500-123-apply.log
 | `done; nothing new was pulled or installed.` | the run worked and none of that happened |
 | `Windows needs a restart. ...` | a recipe left Windows waiting for a restart |
 | `winget reported a failure; ...` | a unit failed; winget's errors are above |
-| `nothing was applied: ...` | borc stopped before running anything: local changes, or a problem in `borc.yaml` or a recipe |
+| `nothing was applied: ...` | borc stopped before running anything: local changes, a failed pull, or a problem in `borc.yaml` or a recipe. When the pull was refused or failed, a `tip` line suggests `--no-pull` |
 
 - **`installed` and `version changed`** come from `winget list`, read before
   and after the run.
@@ -92,7 +92,7 @@ In PowerShell 7, press Tab after `borc` to complete:
 | --- | --- |
 | `borc ` | the commands |
 | `borc help ` | the commands |
-| `borc apply --` | `--what-if`, `--debug`, `--help`, and `--check` once `--what-if` is there |
+| `borc apply --` | `--what-if`, `--no-pull`, `--debug`, `--help`, and `--check` once `--what-if` is there |
 | `borc install ` | your `@local` recipes and the recipes of the cloned recipe repos; winget IDs once the text has a dot, such as `Git.` |
 | `borc uninstall ` | the apps and recipes `borc.yaml` lists |
 | `borc search ` | recipe names |
@@ -144,7 +144,7 @@ borc <command> --help and borc <command> -h show the same page.
 
 <!-- help: apply -->
 ```text
-Usage: borc apply [--what-if [--check]] [--debug]
+Usage: borc apply [--what-if [--check]] [--no-pull] [--debug]
 
 Pulls the config repo and the recipe repos, then applies borc.yaml.
 
@@ -177,6 +177,10 @@ Options:
               (winget configure test), so every recipe is either "would be
               applied" or "in place". Slower; testScripts run, setScripts
               never do; elevated units ask for one UAC prompt.
+  --no-pull   Use the config repo and the recipe repos as they are: no pull,
+              so uncommitted changes are applied too, and no update notice.
+              A recipe repo not cloned yet is still cloned. With --what-if,
+              previews the working copy instead of the fetched commits.
   --debug     Run the recipes one at a time, to find the one that fails.
               Each run may show its own UAC prompt.
   -h, --help  Show this page.

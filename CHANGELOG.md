@@ -40,6 +40,9 @@ The version number is chosen when the release is cut.
   says what was checked, and counts the verdicts. `--what-if --check` also
   tests every recipe unit with `winget configure test`, for a definite
   verdict per recipe.
+- `borc apply --no-pull` applies the working copy as it is, uncommitted changes
+  included; with `--what-if`, it previews the working copy. A refused or failed
+  pull suggests it.
 - A one-line reminder in each new PowerShell 7 terminal when the config repo has
   uncommitted changes or commits not pushed.
 - Tab completion for `borc` in PowerShell 7: commands, options, recipes, the

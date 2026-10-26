@@ -203,7 +203,66 @@ Describe 'Commands with winget mocked' {
         Mock Invoke-BorcWinget { 0 }
         Invoke-Borc -Arguments @('apply') | Should -Be 1
         ($script:Shown -join "`n") | Should -Match 'uncommitted changes'
+        ($script:Shown -join "`n") | Should -Match 'Result: nothing was applied: commit or discard the local changes listed above\.\n  tip: borc apply --no-pull applies your working copy as it is, without pulling'
         Should -Invoke Invoke-BorcWinget -Times 0 -Exactly
+      }
+    }
+
+    It 'suggests --no-pull when the pull itself fails' {
+      InModuleScope Borc -Parameters @{ P = $script:Paths } {
+        param($P)
+        Mock Get-BorcPaths { $P }
+        $script:Shown = [System.Collections.Generic.List[string]]::new()
+        Mock Write-Host { $script:Shown.Add("$Object") }
+        Mock Sync-BorcConfigRepo { throw 'git failed to pull D:\settings (exit code 1).' }
+        Mock Invoke-BorcWinget { 0 }
+        Invoke-Borc -Arguments @('apply') | Should -Be 1
+        ($script:Shown -join "`n") | Should -Match 'Result: nothing was applied: the pull failed \(see the git error above\)\.\n  tip: borc apply --no-pull'
+        Should -Invoke Invoke-BorcWinget -Times 0 -Exactly
+      }
+    }
+
+    It 'applies the working copy as it is with --no-pull, uncommitted changes included' {
+      $path = Join-Path $script:Settings 'borc\borc.yaml'
+      (Get-Content $path -Raw).Replace("secrets:", "  - winget: Not.Committed`nsecrets:") | Set-Content $path -NoNewline
+      InModuleScope Borc -Parameters @{ P = $script:Paths } {
+        param($P)
+        Mock Get-BorcPaths { $P }
+        $script:Shown = [System.Collections.Generic.List[string]]::new()
+        Mock Write-Host { $script:Shown.Add("$Object") }
+        Mock Sync-BorcConfigRepo { throw 'must not pull' }
+        Mock Sync-BorcRecipeRepo {}
+        Mock Show-BorcUpdateNotice { throw 'must not check for updates' }
+        Mock Invoke-BorcWingetQuiet { [pscustomobject]@{ ExitCode = 1; Output = @() } }
+        Mock Test-BorcStoredSecret { $true }
+        Mock Test-BorcRestartPending { $false }
+        $script:Configured = [System.Collections.Generic.List[string]]::new()
+        Mock Invoke-BorcWinget { $script:Configured.Add([IO.File]::ReadAllText($Arguments[2])); 0 }
+        Invoke-Borc -Arguments @('apply', '--no-pull') | Should -Be 0
+        $script:Configured[-1] | Should -Match 'winget: Not\.Committed'
+        $text = $script:Shown -join "`n"
+        $text | Should -Match '==> \[1/5\] Using the config repo as it is'
+        $text | Should -Match '  pulled:\s+skipped \(--no-pull\)'
+      }
+    }
+
+    It 'previews the working copy with --what-if --no-pull, without fetching' {
+      $path = Join-Path $script:Settings 'borc\borc.yaml'
+      (Get-Content $path -Raw).Replace("secrets:", "  - winget: Not.Committed`nsecrets:") | Set-Content $path -NoNewline
+      InModuleScope Borc -Parameters @{ P = $script:Paths } {
+        param($P)
+        Mock Get-BorcPaths { $P }
+        $script:Shown = [System.Collections.Generic.List[string]]::new()
+        Mock Write-Host { $script:Shown.Add("$Object") }
+        Mock Get-BorcIncoming { throw 'must not fetch' }
+        Mock Invoke-BorcWinget { throw 'winget must not run' }
+        Mock Invoke-BorcWingetQuiet { [pscustomobject]@{ ExitCode = 1; Output = @() } }
+        Mock Test-BorcStoredSecret { $true }
+        Invoke-Borc -Arguments @('apply', '--what-if', '--no-pull') | Should -Be 0
+        $text = $script:Shown -join "`n"
+        $text | Should -Match '==> \[1/4\] Reading the config repo and recipe repos as they are \(--no-pull\)'
+        $text | Should -Match '  winget  Not\.Committed\s+would be installed'
+        $text | Should -Match '  pull:\s+recipe repo recipes would be cloned; skipped \(--no-pull\)'
       }
     }
 

@@ -2,19 +2,25 @@
 # recipes as they would be after the pull. Changes nothing.
 
 function Invoke-BorcApplyPreview {
-  param([Parameter(Mandatory)] $Paths, [switch] $Check)
+  param([Parameter(Mandatory)] $Paths, [switch] $Check, [switch] $NoPull)
   # The check of borc.yaml comes last, so a failure in the summary points at it.
   Start-BorcSteps -Total $(if ($Check) { 5 } else { 4 })
-  Start-BorcStep -Name 'Fetching the config repo and recipe repos (no merge)'
   $script:BorcPreviewPulls = [ordered]@{}
-  $dirty = @(Get-BorcDirtyFiles -Path $Paths.Settings)
-  if ($dirty.Count -gt 0) { Write-BorcLog -Message (Format-BorcDirtyMessage -Path $Paths.Settings -Files $dirty) -Level Warning }
-
-  $refs = @{ $Paths.Settings = (Show-BorcIncoming -Path $Paths.Settings -Label 'config repo') }
+  if ($NoPull) {
+    # Nothing is fetched: borc.yaml and the recipes are read as they are on disk.
+    Start-BorcStep -Name 'Reading the config repo and recipe repos as they are (--no-pull)'
+    $refs = @{}
+  } else {
+    Start-BorcStep -Name 'Fetching the config repo and recipe repos (no merge)'
+    $dirty = @(Get-BorcDirtyFiles -Path $Paths.Settings)
+    if ($dirty.Count -gt 0) { Write-BorcLog -Message (Format-BorcDirtyMessage -Path $Paths.Settings -Files $dirty) -Level Warning }
+    $refs = @{ $Paths.Settings = (Show-BorcIncoming -Path $Paths.Settings -Label 'config repo') }
+  }
   $localConfig = ConvertTo-BorcConfig -Text (Read-BorcTextFile -Path (Join-Path $Paths.Settings 'borc\borc.yaml'))
   $notCloned = @()
   foreach ($repo in $localConfig.Recipes) {
     $clone = Join-Path $Paths.Recipes $repo.Name
+    if ($NoPull -and (Test-BorcGitRepo -Path $clone)) { continue }
     if (Test-BorcGitRepo -Path $clone) { $refs[$clone] = Show-BorcIncoming -Path $clone -Label "recipe repo $($repo.Name)" }
     else {
       $notCloned += $repo.Name
@@ -41,20 +47,21 @@ function Invoke-BorcApplyPreview {
   if ($errors.Count -gt 0) { Write-BorcPlanErrors -Errors $errors; return 1 }
   Write-BorcPlanCounts -Plan $plan
   Write-BorcLog -Message 'Nothing was changed (--what-if).'
-  Set-BorcPreviewResult -Pulls $script:BorcPreviewPulls -Rows $rows -Secrets $secrets -Checked:$Check
+  Set-BorcPreviewResult -Pulls $script:BorcPreviewPulls -Rows $rows -Secrets $secrets -Checked:$Check -NoPull:$NoPull
   0
 }
 
 # The answer to "is there anything to apply?", from the pulls, the verdicts
 # and the secrets.
 function Set-BorcPreviewResult {
-  param([System.Collections.IDictionary] $Pulls, [object[]] $Rows = @(), [string[]] $Secrets = @(), [switch] $Checked)
+  param([System.Collections.IDictionary] $Pulls, [object[]] $Rows = @(), [string[]] $Secrets = @(), [switch] $Checked, [switch] $NoPull)
   $would = @($Rows | Where-Object Verdict -Like 'would be *').Count
   $may = @($Rows | Where-Object Verdict -EQ 'may be applied').Count
   $inPlace = @($Rows | Where-Object Verdict -In 'installed', 'in place').Count
   $changes = $Pulls.Count -gt 0 -or $would -gt 0 -or $Secrets.Count -gt 0
   $details = [ordered]@{}
-  $details['pull'] = if ($Pulls.Count -gt 0) { @($Pulls.Keys | ForEach-Object { "$_ $($Pulls[$_])" }) -join ', ' } else { 'nothing new' }
+  $pullText = @($Pulls.Keys | ForEach-Object { "$_ $($Pulls[$_])" }) -join ', '
+  $details['pull'] = if ($NoPull) { (@($pullText) + 'skipped (--no-pull)' | Where-Object { $_ }) -join '; ' } elseif ($pullText) { $pullText } else { 'nothing new' }
   $details['apps and recipes'] = "$would would be installed or applied, $may may be applied, $inPlace in place"
   $details['secrets'] = if ($Secrets.Count -gt 0) { "$($Secrets.Count) would be asked for ($($Secrets -join ', '))" } else { 'none to ask for' }
   $recipes = if ($may -eq 1) { '1 recipe' } else { "$may recipes" }

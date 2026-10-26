@@ -73,10 +73,23 @@ that was already pending before `borc apply` started does not stop it.
 ```
 Error: These tracked files in D:\settings have uncommitted changes:
   borc/borc.yaml
-Commit or discard them, then run borc apply again. borc does not pull over local changes.
+Commit or discard them, then run borc apply again: borc does not pull over local changes.
+To apply them as they are, without pulling, run borc apply --no-pull.
 ```
 
-borc never mixes a pull with your local changes. Look at them with
+The result at the end repeats it:
+
+```
+Result: nothing was applied: commit or discard the local changes listed above.
+  tip: borc apply --no-pull applies your working copy as it is, without pulling
+```
+
+borc never mixes a pull with your local changes. If you are still trying out
+your changes, run `borc apply --no-pull`: it applies the working copy as it
+is, without pulling, so you can commit once it works. `borc apply --what-if
+--no-pull` previews it first.
+
+Otherwise, look at the changes with
 `git -C D:\settings diff`, then commit them:
 
 ```powershell
@@ -93,9 +106,10 @@ Untracked and ignored files never block. If an app keeps changing a tracked
 file you do not care about, ignore it in `.gitignore` (see
 [getting started](getting-started.md#choosing-what-is-tracked-gitignore)).
 
-If the pull itself fails because your branch and the remote have diverged,
-borc shows Git's error. Merge or rebase by hand, then run `borc apply` again;
-borc never merges for you.
+If the pull itself fails, because your branch and the remote have diverged or
+because you are offline, borc shows Git's error and the same `--no-pull` tip.
+Merge or rebase by hand, then run `borc apply` again; borc never merges for
+you. Offline, `borc apply --no-pull` applies what you have.
 
 ## Unknown parameter or undeclared secret
 

@@ -9,7 +9,7 @@
 #>
 
 $script:BorcCompletionCommands = @('help', 'apply', 'upgrade', 'install', 'uninstall', 'search', 'self-update')
-$script:BorcCompletionOptions = @{ apply = @('--what-if', '--check', '--debug', '--help', '-h') }
+$script:BorcCompletionOptions = @{ apply = @('--what-if', '--check', '--no-pull', '--debug', '--help', '-h') }
 
 # The suggestions for the word being completed, given the words before it.
 function Get-BorcCompletion {

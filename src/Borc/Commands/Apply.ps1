@@ -1,17 +1,29 @@
 ﻿$script:BorcRestartExitCode = 3010
 
 function Invoke-BorcApply {
-  param([Parameter(Mandatory)] $Paths, [switch] $Preview, [switch] $Check, [switch] $OneByOne)
+  param([Parameter(Mandatory)] $Paths, [switch] $Preview, [switch] $Check, [switch] $OneByOne, [switch] $NoPull)
   Assert-BorcSettings -Paths $Paths
-  if ($Preview) { return Invoke-BorcApplyPreview -Paths $Paths -Check:$Check }
+  if ($Preview) { return Invoke-BorcApplyPreview -Paths $Paths -Check:$Check -NoPull:$NoPull }
 
   Start-BorcSteps -Total 5
-  Start-BorcStep -Name "Pulling the config repo ($($Paths.Settings))"
   $heads = Get-BorcRepoHeads -Paths $Paths
-  Sync-BorcConfigRepo -Path $Paths.Settings
-  Start-BorcStep -Name 'Pulling recipe repos'
-  Sync-BorcRecipeRepos -Paths $Paths
-  Show-BorcUpdateNotice -Paths $Paths
+  if ($NoPull) {
+    Start-BorcStep -Name "Using the config repo as it is ($($Paths.Settings), --no-pull)"
+    Write-BorcLog -Message 'Not pulling: borc applies the working copy, uncommitted changes included.'
+    Start-BorcStep -Name 'Using the recipe repos as they are (--no-pull)'
+    Sync-BorcRecipeRepos -Paths $Paths -MissingOnly
+  } else {
+    Start-BorcStep -Name "Pulling the config repo ($($Paths.Settings))"
+    try {
+      Sync-BorcConfigRepo -Path $Paths.Settings
+      Start-BorcStep -Name 'Pulling recipe repos'
+      Sync-BorcRecipeRepos -Paths $Paths
+    } catch {
+      Add-BorcNoPullTip
+      throw
+    }
+    Show-BorcUpdateNotice -Paths $Paths
+  }
   $pulls = Get-BorcPulls -Before $heads -After (Get-BorcRepoHeads -Paths $Paths)
 
   Start-BorcStep -Name 'Checking borc.yaml and the recipes'
@@ -26,8 +38,18 @@ function Invoke-BorcApply {
   $before = Get-BorcPackageVersions -Packages $packages
   $code = if ($OneByOne) { Invoke-BorcRunsOneByOne -Plan $plan } else { Invoke-BorcRuns -Plan $plan }
   $after = Get-BorcPackageVersions -Packages $packages
-  Set-BorcApplyResult -ExitCode $code -Pulls $pulls -Before $before -After $after -Recipes $plan.Order.Count -Secrets $stored
+  Set-BorcApplyResult -ExitCode $code -Pulls $pulls -Before $before -After $after -Recipes $plan.Order.Count -Secrets $stored -NoPull:$NoPull
   $code
+}
+
+# When the pull is refused or fails, the result points at --no-pull, which
+# applies the working copy as it is.
+function Add-BorcNoPullTip {
+  $tip = 'borc apply --no-pull applies your working copy as it is, without pulling'
+  if (-not $script:BorcResult) {
+    Set-BorcResult -Headline 'nothing was applied: the pull failed (see the git error above).' -Color Red
+  }
+  $script:BorcResult.Details['tip'] = $tip
 }
 
 # The commit each repo is at: the config repo and every recipe clone.
@@ -86,12 +108,14 @@ function Set-BorcApplyResult {
     [System.Collections.IDictionary] $Before,
     [System.Collections.IDictionary] $After,
     [int] $Recipes,
-    [string[]] $Secrets = @()
+    [string[]] $Secrets = @(),
+    [switch] $NoPull
   )
   $installed = @($After.Keys | Where-Object { $After[$_] -and -not $Before[$_] })
   $upgraded = @($After.Keys | Where-Object { $After[$_] -and $Before[$_] -and $After[$_] -ne $Before[$_] } | ForEach-Object { "$_ ($($Before[$_]) -> $($After[$_]))" })
   $details = [ordered]@{}
-  $details['pulled'] = if ($Pulls.Count -gt 0) { @($Pulls.Keys | ForEach-Object { "$_ $($Pulls[$_])" }) -join ', ' } else { 'nothing new' }
+  $pulledText = @($Pulls.Keys | ForEach-Object { "$_ $($Pulls[$_])" }) -join ', '
+  $details['pulled'] = if ($NoPull) { (@($pulledText) + 'skipped (--no-pull)' | Where-Object { $_ }) -join '; ' } elseif ($pulledText) { $pulledText } else { 'nothing new' }
   $details['installed'] = if ($installed.Count -gt 0) { $installed -join ', ' } else { 'nothing new' }
   if ($upgraded.Count -gt 0) { $details['version changed'] = $upgraded -join ', ' }
   if ($Recipes -gt 0) { $details['recipes'] = "$Recipes run; winget does not say which of their settings changed" }
@@ -113,12 +137,15 @@ function Write-BorcPlanCounts {
 }
 
 function Sync-BorcRecipeRepos {
-  param([Parameter(Mandatory)] $Paths)
+  param([Parameter(Mandatory)] $Paths, [switch] $MissingOnly)
   $text = Read-BorcTextFile -Path (Join-Path $Paths.Settings 'borc\borc.yaml')
   $config = ConvertTo-BorcConfig -Text $text
   if ($config.Recipes.Count -eq 0) { Write-BorcLog -Message 'borc.yaml lists no recipe repo.' }
   foreach ($repo in $config.Recipes) {
-    Sync-BorcRecipeRepo -Url $repo.Url -Path (Join-Path $Paths.Recipes $repo.Name)
+    $clone = Join-Path $Paths.Recipes $repo.Name
+    # --no-pull still clones a missing repo: its recipes could not run otherwise.
+    if ($MissingOnly -and (Test-BorcGitRepo -Path $clone)) { Write-BorcLog -Message "recipe repo $($repo.Name): used as it is."; continue }
+    Sync-BorcRecipeRepo -Url $repo.Url -Path $clone
   }
 }
 

@@ -36,8 +36,8 @@ Describe 'borc Tab completion' {
     @{ Line = 'borc '; Expected = @('help', 'apply', 'upgrade', 'install', 'uninstall', 'search', 'self-update') }
     @{ Line = 'borc u'; Expected = @('upgrade', 'uninstall') }
     @{ Line = 'borc help se'; Expected = @('search', 'self-update') }
-    @{ Line = 'borc apply --'; Expected = @('--what-if', '--debug', '--help') }
-    @{ Line = 'borc apply --what-if --'; Expected = @('--check', '--debug', '--help') }
+    @{ Line = 'borc apply --'; Expected = @('--what-if', '--no-pull', '--debug', '--help') }
+    @{ Line = 'borc apply --what-if --'; Expected = @('--check', '--no-pull', '--debug', '--help') }
     @{ Line = 'borc install '; Expected = @("'@local/sysinternals'", "'@local/wsl-ubuntu'", 'recipes/node') }
     @{ Line = 'borc install @local/w'; Expected = @("'@local/wsl-ubuntu'") }
     @{ Line = "borc install '@local/s"; Expected = @("'@local/sysinternals'") }

@@ -263,6 +263,17 @@ reads winget's per-unit result lines rather than its exit code, which is not 0
 as soon as one unit would change; a line it does not recognise becomes
 "could not test", never a guess.
 
+### --no-pull for trying a configuration before committing it
+
+`borc apply` refuses to pull over local changes, so a normal run never mixes
+incoming commits with the user's edits. While building a configuration, that
+forces a commit before every try. `--no-pull` removes the conflict rather than
+the safety: when nothing is pulled, there is nothing to mix, so borc applies
+the working copy as it is. It is an explicit option, not a fallback, so
+`borc apply` alone keeps pulling the latest configuration or applying nothing.
+When the pull is refused or fails, the result points at the option, since the
+user may simply be trying things out.
+
 ### Trust winget on failures
 
 winget's errors are shown as they come and its exit code is reported. Retry

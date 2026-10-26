@@ -1,4 +1,4 @@
-Usage: borc apply [--what-if [--check]] [--debug]
+Usage: borc apply [--what-if [--check]] [--no-pull] [--debug]
 
 Pulls the config repo and the recipe repos, then applies borc.yaml.
 
@@ -31,6 +31,10 @@ Options:
               (winget configure test), so every recipe is either "would be
               applied" or "in place". Slower; testScripts run, setScripts
               never do; elevated units ask for one UAC prompt.
+  --no-pull   Use the config repo and the recipe repos as they are: no pull,
+              so uncommitted changes are applied too, and no update notice.
+              A recipe repo not cloned yet is still cloned. With --what-if,
+              previews the working copy instead of the fetched commits.
   --debug     Run the recipes one at a time, to find the one that fails.
               Each run may show its own UAC prompt.
   -h, --help  Show this page.

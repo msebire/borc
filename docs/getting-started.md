@@ -164,7 +164,9 @@ on Tab completion for `borc` (see [commands](commands.md#tab-completion)).
    change and applies it.
 
 `borc apply` refuses to pull while tracked files have uncommitted changes, so
-it never mixes incoming changes with yours. Commit or discard them first.
+it never mixes incoming changes with yours. Commit or discard them first, or,
+while you are still trying out a change, run `borc apply --no-pull`: it applies
+the working copy as it is, without pulling.
 
 Each new PowerShell 7 terminal reminds you when something is left to do, with
 one dimmed line, and says nothing otherwise:
