@@ -286,6 +286,19 @@ A fresh machine must not stop on prompts, and borc leaves no permanent
 security change: PSGallery is not marked as trusted, and the execution policy
 is bypassed for the installer's process only.
 
+### Modules in borc's own folder
+
+`Install-Module -Scope CurrentUser` writes to Documents, which may be
+redirected, synced, or protected by Defender's controlled folder access: the
+installer failed there on a real work computer. borc saves the modules it
+needs with `Save-Module` into `%LOCALAPPDATA%\borc\modules` and loads them by
+path. That folder is never protected, and borc leaves both Documents and
+`PSModulePath` as they are, which also fits "no lasting change" better.
+
+The PowerShell 7 profile cannot move out of Documents. When borc cannot
+write it, it explains why and shows the lines to add, rather than failing a
+whole setup over a convenience.
+
 ### Windows 11 target, Windows 10 22H2 best effort
 
 New machines run Windows 11. Windows 10 is out of support but still in use,

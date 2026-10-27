@@ -1,7 +1,10 @@
-﻿function Import-BorcYamlModule {
-  if (-not (Get-Command -Name ConvertFrom-Yaml -ErrorAction SilentlyContinue)) {
-    Import-Module -Name powershell-yaml -ErrorAction Stop
-  }
+﻿# powershell-yaml from borc's own modules folder when setup saved it there,
+# otherwise from the usual module path.
+function Import-BorcYamlModule {
+  if (Get-Command -Name ConvertFrom-Yaml -ErrorAction SilentlyContinue) { return }
+  $saved = Join-Path (Get-BorcPaths).Modules 'powershell-yaml'
+  if (Test-Path -LiteralPath $saved) { Import-Module -Name $saved -ErrorAction Stop }
+  else { Import-Module -Name powershell-yaml -ErrorAction Stop }
 }
 
 # Parses YAML into ordered dictionaries. Throws with the file name on a syntax error.

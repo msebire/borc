@@ -35,7 +35,7 @@ function Update-BorcRuntime {
   $paths = Get-BorcPaths
   Install-BorcRuntimeFiles -Paths $paths
   $profilePath = Get-BorcProfilePath
-  if (Set-BorcProfileBlock -Path $profilePath) { Write-Host "Updated the borc block in $profilePath." }
+  if (Update-BorcProfileBlockOrExplain -Path $profilePath) { Write-Host "Updated the borc block in $profilePath." }
 }
 
 # Copies the borc.cmd shim and Get-BorcSecret.ps1 out of the engine clone, to

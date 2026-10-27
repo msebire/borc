@@ -50,6 +50,10 @@ The version number is chosen when the release is cut.
 - A `Result:` at the end of `borc apply` and `borc apply --what-if`: whether
   there is (or was) anything to apply, with what was pulled, installed and
   asked for. The log path follows, dimmed.
+- The PowerShell Gallery modules borc needs are saved in
+  `%LOCALAPPDATA%\borc\modules`, not in Documents, so the installer works with
+  Defender's controlled folder access on. A profile borc cannot write is
+  explained, with the lines to add by hand, instead of failing setup.
 - One `winget list` call for all packages, instead of one per package.
 - Readable output: numbered steps separated by blank lines, a start and an
   end line around every `git` and `winget` command, a summary with each

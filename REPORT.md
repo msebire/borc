@@ -4,6 +4,59 @@ Latest report on top.
 
 ---
 
+## Step 19: installer fix for controlled folder access (2026-10-27)
+
+### Done
+
+- **Bug,** from the maintainer's work computer: the installer stopped at
+  "Updating winget" with "Could not find a part of the path
+  '...\Documents\WindowsPowerShell\Modules\Microsoft.WinGet.Client\1.29.380'",
+  then wrongly advised updating App Installer.
+  - **Diagnosis:** `EnableControlledFolderAccess = 1`. Defender blocks
+    unknown programs from writing in Documents, where
+    `Install-Module -Scope CurrentUser` puts modules. Documents itself was
+    normal (not redirected, present).
+- **Fix:**
+  - **Modules:** `install.ps1` saves `Microsoft.WinGet.Client` with
+    `Save-Module` into `%LOCALAPPDATA%\borc\modules\WindowsPowerShell`, and
+    setup saves `powershell-yaml` into `%LOCALAPPDATA%\borc\modules\PowerShell`.
+    Both are imported by path; the engine loads `powershell-yaml` from there
+    when present. A module already available elsewhere is still reused.
+  - **Messages:** a module that cannot be installed is named ("Could not
+    install the PowerShell module …"), and the App Installer advice only
+    appears when `Repair-WinGetPackageManager` itself fails.
+  - **Profile:** when the profile (also in Documents) cannot be written,
+    setup and `self-update` carry on. borc names controlled folder access
+    when it is on, and prints the lines to add by hand.
+- **Docs:** `troubleshooting.md` ("Controlled folder access"), `design.md`,
+  `CHANGELOG.md`.
+- **Tests:** no `Install-Module` anywhere in `install.ps1`; a saved module is
+  reused; each error message; `powershell-yaml` saved into borc's folder; the
+  profile explanation with controlled folder access on and off. 262 tests
+  pass.
+
+### Assumptions
+
+- A module the user already has on `PSModulePath` is used as it is, not
+  saved again.
+
+### Questions
+
+- None.
+
+### Deviations
+
+- From the spec ("modules go to -Scope CurrentUser"): they go to
+  `%LOCALAPPDATA%\borc\modules` instead, for the reason above. Still per
+  user, still no PSGallery trust, and no change to Documents or
+  `PSModulePath`.
+
+### To verify
+
+- The installer on the work computer, with controlled folder access on.
+
+---
+
 ## Step 18: apply --no-pull (2026-10-26)
 
 ### Done

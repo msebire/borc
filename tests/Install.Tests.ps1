@@ -72,6 +72,46 @@ foreach (`$encoding in 'utf-8', 'windows-1252') {
   }
 }
 
+Describe 'PowerShell Gallery modules for the installer' {
+  BeforeEach { $script:Folder = New-TestFolder }
+  AfterEach { Remove-Item -LiteralPath $script:Folder -Recurse -Force }
+
+  It 'never installs into Documents: no Install-Module anywhere in install.ps1' {
+    $script:InstallAst.FindAll({ param($node) $node -is [System.Management.Automation.Language.CommandAst] -and $node.GetCommandName() -eq 'Install-Module' }, $true) | Should -BeNullOrEmpty
+  }
+
+  It 'saves a missing module into borc''s own folder and returns its path' {
+    Mock Write-Host {}
+    Mock Get-Module { $null }
+    Mock Get-PackageProvider { [pscustomobject]@{ Version = [version]'2.8.5.208' } }
+    Mock Save-Module {}
+    Install-BorcGalleryModule -Name 'Microsoft.WinGet.Client' -Folder $script:Folder | Should -Be (Join-Path $script:Folder 'Microsoft.WinGet.Client')
+    Should -Invoke Save-Module -Times 1 -Exactly -ParameterFilter { $Name -eq 'Microsoft.WinGet.Client' -and $Path -eq $script:Folder }
+  }
+
+  It 'reuses a module it saved before, without going online' {
+    New-Item -ItemType Directory -Path (Join-Path $script:Folder 'Microsoft.WinGet.Client') | Out-Null
+    Mock Save-Module { throw 'must not save again' }
+    Install-BorcGalleryModule -Name 'Microsoft.WinGet.Client' -Folder $script:Folder | Should -Be (Join-Path $script:Folder 'Microsoft.WinGet.Client')
+  }
+
+  It 'names the module, not App Installer, when the module cannot be installed' {
+    Mock Install-BorcGalleryModule { throw "Could not find a part of the path 'C:\Users\x\Documents\WindowsPowerShell\Modules'." }
+    $message = try { Update-BorcWinget; '' } catch { $_.Exception.Message }
+    $message | Should -Match 'Could not install the PowerShell module Microsoft\.WinGet\.Client'
+    $message | Should -Not -Match 'App Installer'
+  }
+
+  It 'suggests App Installer only when winget itself cannot be updated' {
+    function Repair-WinGetPackageManager { param([switch] $Latest) }
+    Mock Write-Host {}
+    Mock Install-BorcGalleryModule { 'Microsoft.WinGet.Client' }
+    Mock Import-Module {}
+    Mock Repair-WinGetPackageManager { throw 'repair failed' }
+    { Update-BorcWinget } | Should -Throw '*winget could not be updated: repair failed*App Installer*'
+  }
+}
+
 Describe 'Installer output' {
   BeforeEach {
     $script:SavedNoColor = $env:NO_COLOR
@@ -174,6 +214,37 @@ Describe 'Engine clone' {
 
   It 'stops with a clear error for a branch that does not exist' {
     { Install-TestEngine -Branch 'no-such-branch' } | Should -Throw '*switch the borc engine to the branch no-such-branch*'
+  }
+}
+
+Describe 'powershell-yaml for the engine' {
+  It 'saves it into borc''s own modules folder, never with Install-Module' {
+    $root = New-TestFolder
+    try {
+      InModuleScope Borc -Parameters @{ R = $root } {
+        param($R)
+        Mock Write-Host {}
+        Mock Get-BorcPaths { [pscustomobject]@{ Modules = Join-Path $R 'modules\PowerShell' } }
+        Mock Get-Module { $null }
+        Mock Save-Module {}
+        Mock Install-Module { throw 'must not install into Documents' }
+        Install-BorcYamlModule
+        Should -Invoke Save-Module -Times 1 -Exactly -ParameterFilter { $Name -eq 'powershell-yaml' -and $Path -eq (Join-Path $R 'modules\PowerShell') }
+      }
+    } finally {
+      Remove-Item -LiteralPath $root -Recurse -Force
+    }
+  }
+
+  It 'says which module it could not install' {
+    InModuleScope Borc {
+      Mock Write-Host {}
+      Mock Get-BorcPaths { [pscustomobject]@{ Modules = Join-Path ([IO.Path]::GetTempPath()) ('borc-test-' + [guid]::NewGuid().ToString('N')) } }
+      Mock Get-Module { $null }
+      Mock New-Item {}
+      Mock Save-Module { throw 'blocked' }
+      { Install-BorcYamlModule } | Should -Throw '*Could not install the PowerShell module powershell-yaml: blocked*'
+    }
   }
 }
 

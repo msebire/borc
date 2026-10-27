@@ -52,6 +52,37 @@ Describe 'Profile block file' {
   }
 }
 
+Describe 'A profile borc cannot write' {
+  It 'explains why and shows the lines to add, instead of failing' {
+    $result = InModuleScope Borc {
+      $script:Shown = [System.Collections.Generic.List[string]]::new()
+      Mock Write-Host { $script:Shown.Add("$Object") }
+      Mock Set-BorcProfileBlock { throw "Access to the path 'C:\Users\x\Documents\PowerShell\profile.ps1' is denied." }
+      Mock Test-BorcControlledFolderAccess { $true }
+      $value = Update-BorcProfileBlockOrExplain -Path 'C:\Users\x\Documents\PowerShell\profile.ps1'
+      [pscustomobject]@{ Value = $value; Text = $script:Shown -join "`n" }
+    }
+    $result.Value | Should -BeNullOrEmpty
+    $result.Text | Should -Match 'Could not write the borc block to C:\\Users\\x\\Documents\\PowerShell\\profile\.ps1: Access'
+    $result.Text | Should -Match 'Controlled folder access is on'
+    $result.Text | Should -Match ([regex]::Escape('    # >>> borc >>>'))
+    $result.Text | Should -Match ([regex]::Escape('    # <<< borc <<<'))
+  }
+
+  It 'does not mention controlled folder access when it is off' {
+    $text = InModuleScope Borc {
+      $script:Shown = [System.Collections.Generic.List[string]]::new()
+      Mock Write-Host { $script:Shown.Add("$Object") }
+      Mock Set-BorcProfileBlock { throw 'disk full' }
+      Mock Test-BorcControlledFolderAccess { $false }
+      $null = Update-BorcProfileBlockOrExplain -Path 'D:\profile.ps1'
+      $script:Shown -join "`n"
+    }
+    $text | Should -Not -Match 'Controlled folder access'
+    $text | Should -Match 'add these lines to D:\\profile\.ps1'
+  }
+}
+
 Describe 'Profile block behaviour' {
   BeforeAll {
     $script:Folder = New-TestFolder

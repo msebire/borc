@@ -24,6 +24,12 @@ function Set-BorcUserPath {
   Set-ItemProperty -LiteralPath 'HKCU:\Environment' -Name 'Path' -Value $Value -Type ExpandString
 }
 
+# Defender's controlled folder access blocks unknown programs from writing in
+# protected folders such as Documents. $false when it is off or unknown.
+function Test-BorcControlledFolderAccess {
+  try { [int](Get-MpPreference -ErrorAction Stop).EnableControlledFolderAccess -eq 1 } catch { $false }
+}
+
 function Read-BorcInput {
   param([Parameter(Mandatory)] [string] $Prompt)
   Read-Host -Prompt $Prompt
@@ -47,6 +53,8 @@ function Get-BorcPaths {
     Recipes = Join-Path $internal 'recipes'
     Logs = Join-Path $internal 'logs'
     Bin = Join-Path $internal 'bin'
+    # PowerShell Gallery modules borc saved for itself (see Install-BorcYamlModule).
+    Modules = Join-Path $internal 'modules\PowerShell'
     Settings = Get-BorcEnvironmentVariable -Name 'BORC_SETTINGS'
     Home = Get-BorcEnvironmentVariable -Name 'BORC_HOME'
   }

@@ -26,6 +26,27 @@ Update App Installer from the Microsoft Store, then run the borc installer again
 Open the Microsoft Store, search for **App Installer**, update it, then run
 the one-liner again. Every step of the installer can be run again safely.
 
+## Controlled folder access
+
+When Defender's controlled folder access (ransomware protection) is on, it
+blocks unknown programs from writing in protected folders such as Documents.
+borc keeps out of them: the PowerShell Gallery modules it needs
+(`Microsoft.WinGet.Client`, `powershell-yaml`) go to
+`%LOCALAPPDATA%\borc\modules`, which is not protected.
+
+One file still lives in Documents: the PowerShell 7 profile, where borc adds
+its block. If borc cannot write it, setup goes on and says so:
+
+```
+Warning: Could not write the borc block to C:\Users\you\Documents\PowerShell\profile.ps1: ...
+Controlled folder access is on, and it protects the Documents folder that holds this profile. ...
+To load borc/scripts and Tab completion in PowerShell 7, add these lines to ...:
+```
+
+Either allow `pwsh.exe` in Windows Security (Virus & threat protection >
+Ransomware protection > Allow an app through Controlled folder access), then
+run `borc self-update`, which writes the block again; or copy the lines borc
+prints into the profile yourself. Your organisation may manage this setting.
 ## A unit failed
 
 borc shows winget's output and errors as they come, and adds no retry or skip

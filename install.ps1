@@ -121,24 +121,34 @@ function Initialize-BorcSession {
   [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 }
 
+# borc keeps the PowerShell Gallery modules it needs in its own folder, not in
+# Documents: Documents may be redirected or protected (controlled folder
+# access), and borc changes nothing there. Returns what to give Import-Module.
 function Install-BorcGalleryModule {
-  param([Parameter(Mandatory = $true)] [string] $Name)
-  if (Get-Module -ListAvailable -Name $Name) { return }
+  param([Parameter(Mandatory = $true)] [string] $Name, [string] $Folder = (Join-Path $env:LOCALAPPDATA 'borc\modules\WindowsPowerShell'))
+  $saved = Join-Path $Folder $Name
+  if (Test-Path -LiteralPath $saved) { return $saved }
+  if (Get-Module -ListAvailable -Name $Name) { return $Name }
   $nuget = Get-PackageProvider -ListAvailable -Name NuGet -ErrorAction SilentlyContinue | Where-Object { $_.Version -ge [version]'2.8.5.201' }
   if (-not $nuget) {
     Write-InstallLine -Text '  > Install-PackageProvider NuGet'
     Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Scope CurrentUser -Force | Out-Null
   }
-  # -Force answers the "untrusted repository" prompt for this install only;
-  # PSGallery is not marked as trusted.
-  Write-InstallLine -Text "  > Install-Module $Name"
-  Install-Module -Name $Name -Scope CurrentUser -Repository PSGallery -Force -AllowClobber -ErrorAction Stop
+  # PSGallery is not marked as trusted; -Force answers its prompt for this save only.
+  Write-InstallLine -Text "  > Save-Module $Name -Path $Folder"
+  New-Item -ItemType Directory -Path $Folder -Force | Out-Null
+  Save-Module -Name $Name -Path $Folder -Repository PSGallery -Force -ErrorAction Stop
+  $saved
 }
 
 function Update-BorcWinget {
   try {
-    Install-BorcGalleryModule -Name 'Microsoft.WinGet.Client'
-    Import-Module -Name Microsoft.WinGet.Client -ErrorAction Stop
+    $module = Install-BorcGalleryModule -Name 'Microsoft.WinGet.Client'
+    Import-Module -Name $module -ErrorAction Stop
+  } catch {
+    throw "Could not install the PowerShell module Microsoft.WinGet.Client, which borc uses to update winget: $($_.Exception.Message)"
+  }
+  try {
     Write-InstallLine -Text '  > Repair-WinGetPackageManager -Latest'
     $started = Get-Date
     Repair-WinGetPackageManager -Latest -ErrorAction Stop | Out-Null
@@ -147,7 +157,6 @@ function Update-BorcWinget {
     throw "winget could not be updated: $($_.Exception.Message)`nUpdate App Installer from the Microsoft Store, then run the borc installer again."
   }
 }
-
 function Update-BorcSessionPath {
   $machine = [Environment]::GetEnvironmentVariable('Path', 'Machine')
   $user = [Environment]::GetEnvironmentVariable('Path', 'User')

@@ -36,6 +36,23 @@ function Update-BorcProfileText {
   $Text + $separator + $block + $newline
 }
 
+# Writes the block, or, when the profile cannot be written, explains why and
+# shows the lines to add by hand. $true written, $false already there, $null not written.
+function Update-BorcProfileBlockOrExplain {
+  param([Parameter(Mandatory)] [string] $Path)
+  try {
+    return (Set-BorcProfileBlock -Path $Path)
+  } catch {
+    Write-BorcLog -Message "Could not write the borc block to ${Path}: $($_.Exception.Message)" -Level Warning
+    if (Test-BorcControlledFolderAccess) {
+      Write-BorcLog -Message 'Controlled folder access is on, and it protects the Documents folder that holds this profile. Allow pwsh.exe in Windows Security (Ransomware protection > Allow an app through Controlled folder access), or add the lines below yourself.'
+    }
+    Write-BorcLog -Message "To load borc/scripts and Tab completion in PowerShell 7, add these lines to ${Path}:"
+    foreach ($line in (Get-BorcProfileBlock) -split "`n") { Write-BorcLog -Message "    $line" }
+    return $null
+  }
+}
+
 function Set-BorcProfileBlock {
   param([Parameter(Mandatory)] [string] $Path)
   $exists = Test-Path -LiteralPath $Path

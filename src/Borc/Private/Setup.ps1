@@ -26,8 +26,9 @@ function Invoke-BorcSetup {
     Set-BorcUserEnvironmentVariable -Name 'BORC_SETTINGS' -Value $settings
     Set-BorcUserEnvironmentVariable -Name 'BORC_HOME' -Value $homeFolder
     Start-BorcStep -Name 'PowerShell 7 profile block'
-    if (Set-BorcProfileBlock -Path (Get-BorcProfilePath)) { Write-BorcLog -Message "Added the borc block to $(Get-BorcProfilePath)." }
-    else { Write-BorcLog -Message 'The borc block is already up to date.' }
+    $written = Update-BorcProfileBlockOrExplain -Path (Get-BorcProfilePath)
+    if ($written) { Write-BorcLog -Message "Added the borc block to $(Get-BorcProfilePath)." }
+    elseif ($written -eq $false) { Write-BorcLog -Message 'The borc block is already up to date.' }
     $code = 0
   } catch {
     Write-BorcLog -Message $_.Exception.Message -Level Error
@@ -41,10 +42,18 @@ function Invoke-BorcSetup {
   Invoke-Borc -Arguments @('apply')
 }
 
+# Saved in borc's own folder rather than Documents, which may be redirected or
+# protected by controlled folder access. Import-BorcYamlModule loads it from there.
 function Install-BorcYamlModule {
-  if (Get-Module -ListAvailable -Name powershell-yaml) { return }
-  Write-BorcLog -Message 'Installing the powershell-yaml module from the PowerShell Gallery.'
-  Install-Module -Name powershell-yaml -Scope CurrentUser -Repository PSGallery -Force -ErrorAction Stop
+  $folder = (Get-BorcPaths).Modules
+  if ((Test-Path -LiteralPath (Join-Path $folder 'powershell-yaml')) -or (Get-Module -ListAvailable -Name powershell-yaml)) { return }
+  Write-BorcLog -Message "Saving the powershell-yaml module from the PowerShell Gallery into $folder."
+  New-Item -ItemType Directory -Path $folder -Force | Out-Null
+  try {
+    Save-Module -Name powershell-yaml -Path $folder -Repository PSGallery -Force -ErrorAction Stop
+  } catch {
+    throw "Could not install the PowerShell module powershell-yaml: $($_.Exception.Message)"
+  }
 }
 
 function Get-BorcProfilePath {
