@@ -22,6 +22,25 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubus
 This works even when the execution policy blocks scripts. The policy is
 bypassed for this one process and left as it is.
 
+### On a managed computer
+
+The installer brings winget to its latest version and installs or upgrades
+Git, PowerShell 7 and Microsoft.DSC. Where those must stay as they are, or
+where the PowerShell Gallery is blocked, set `BORC_SKIP_UPDATES` for that one
+command, from a PowerShell prompt:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -Command "`$env:BORC_SKIP_UPDATES='1'; irm https://raw.githubusercontent.com/msebire/borc/main/install.ps1 | iex"
+```
+
+- winget is not updated, and the PowerShell Gallery is not used for it. The
+  installer checks that winget can run configuration files (`winget
+  configure`) and stops with a clear message if it cannot. A winget older than
+  1.29, the version borc was checked with, gets a warning.
+- Git, PowerShell 7 and Microsoft.DSC are installed only if they are missing,
+  never upgraded.
+- The variable is never stored: the next run without it updates as usual.
+
 ## Five-minute quick start
 
 1. Run the one-liner above.

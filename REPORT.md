@@ -4,6 +4,53 @@ Latest report on top.
 
 ---
 
+## Step 20: BORC_SKIP_UPDATES (2026-10-27)
+
+### Done
+
+- **`BORC_SKIP_UPDATES=1`** (also `true` or `yes`), read by `install.ps1`
+  from its own process only, like `BORC_BRANCH`. The installer warns, then:
+  - **does not update winget,** and does not use the PowerShell Gallery for
+    it. It checks that `winget configure` works and stops with a clear
+    message if it does not, or if winget is missing. A winget older than
+    1.29.0 gets a warning;
+  - **installs Git, PowerShell 7 and Microsoft.DSC only if missing,**
+    detected by their command (`git.exe`, `pwsh.exe`, `dsc.exe`) or by
+    `winget list`;
+  - **names the skip in the step titles,** so the summary shows it.
+- **The Gallery error** ("PowerShell Gallery is currently unavailable",
+  from the maintainer's second try on the work computer) now points at
+  `BORC_SKIP_UPDATES`.
+- **Probed:** `winget configure --help` exits with 0 on winget 1.29.380, and
+  an unknown command exits non-zero, so the check tells them apart.
+- **Docs:** README ("On a managed computer"), `troubleshooting.md` (the
+  Gallery error), `design.md`, `CHANGELOG.md`.
+- **Tests:** the variable, the winget check (fine, old, unable, missing),
+  installed tools left alone, missing ones installed, and the normal path
+  unchanged.
+
+### Assumptions
+
+- **The engine still follows its branch** with `BORC_SKIP_UPDATES`: it is
+  borc itself, not a tool on the machine.
+- **powershell-yaml** is still installed if missing, since borc needs it, but
+  never updated.
+
+### Questions
+
+- None.
+
+### Deviations
+
+- From the spec, which always updates winget and upgrades Git and
+  PowerShell 7: an opt-out added at the maintainer's request.
+
+### To verify
+
+- The installer on the work computer with `BORC_SKIP_UPDATES=1`.
+
+---
+
 ## Step 19: installer fix for controlled folder access (2026-10-27)
 
 ### Done

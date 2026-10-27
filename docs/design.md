@@ -286,6 +286,17 @@ A fresh machine must not stop on prompts, and borc leaves no permanent
 security change: PSGallery is not marked as trusted, and the execution policy
 is bypassed for the installer's process only.
 
+### BORC_SKIP_UPDATES for managed computers
+
+The installer always brings winget, Git and PowerShell 7 up to date, so a
+fresh machine starts from known tools. A managed work computer may forbid
+that, keep its own versions, or block the PowerShell Gallery. The opt-out
+follows `BORC_BRANCH`: read from the installer's process only, never stored,
+so a machine is never quietly left out of updates. It skips updates, not
+safety: winget must still be able to run configuration files, because borc
+cannot work without them, and a winget older than the version borc was checked
+with gets a warning rather than a refusal.
+
 ### Modules in borc's own folder
 
 `Install-Module -Scope CurrentUser` writes to Documents, which may be

@@ -99,6 +99,7 @@ Describe 'PowerShell Gallery modules for the installer' {
     Mock Install-BorcGalleryModule { throw "Could not find a part of the path 'C:\Users\x\Documents\WindowsPowerShell\Modules'." }
     $message = try { Update-BorcWinget; '' } catch { $_.Exception.Message }
     $message | Should -Match 'Could not install the PowerShell module Microsoft\.WinGet\.Client'
+    $message | Should -Match 'BORC_SKIP_UPDATES=1'
     $message | Should -Not -Match 'App Installer'
   }
 
@@ -109,6 +110,62 @@ Describe 'PowerShell Gallery modules for the installer' {
     Mock Import-Module {}
     Mock Repair-WinGetPackageManager { throw 'repair failed' }
     { Update-BorcWinget } | Should -Throw '*winget could not be updated: repair failed*App Installer*'
+  }
+}
+
+Describe 'BORC_SKIP_UPDATES' {
+  BeforeEach { $script:SavedSkip = $env:BORC_SKIP_UPDATES }
+  AfterEach { $env:BORC_SKIP_UPDATES = $script:SavedSkip }
+
+  It 'is off unless set to 1, true or yes for the process, and warns when on' {
+    $env:BORC_SKIP_UPDATES = $null
+    Test-BorcSkipUpdates 3>$null | Should -BeFalse
+    $env:BORC_SKIP_UPDATES = 'no'
+    Test-BorcSkipUpdates 3>$null | Should -BeFalse
+    $env:BORC_SKIP_UPDATES = '1'
+    Test-BorcSkipUpdates 3>$null | Should -BeTrue
+    Test-BorcSkipUpdates 3>&1 | Where-Object { $_ -is [System.Management.Automation.WarningRecord] } | Should -Match 'installed only if missing, and never updated'
+  }
+
+  It 'accepts a winget that can run configuration files, without updating it' {
+    Mock Write-Host {}
+    Mock Get-BorcWingetVersion { [version]'1.29.380' }
+    Mock winget { $global:LASTEXITCODE = 0 }
+    { Assert-BorcWingetConfigure 3>$null } | Should -Not -Throw
+    Should -Invoke Write-Host -ParameterFilter { "$Object" -like '*winget 1.29.380 can run configuration files; not updated*' }
+  }
+
+  It 'warns about a winget older than the one borc was checked with' {
+    Mock Write-Host {}
+    Mock Get-BorcWingetVersion { [version]'1.20.0' }
+    Mock winget { $global:LASTEXITCODE = 0 }
+    Assert-BorcWingetConfigure 3>&1 | Where-Object { $_ -is [System.Management.Automation.WarningRecord] } | Should -Match 'older than 1\.29\.0'
+  }
+
+  It 'stops when winget cannot run configuration files, or is missing' {
+    Mock Get-BorcWingetVersion { [version]'1.5.0' }
+    Mock winget { $global:LASTEXITCODE = -1978335230 }
+    { Assert-BorcWingetConfigure } | Should -Throw '*cannot run configuration files*BORC_SKIP_UPDATES*'
+    Mock Get-BorcWingetVersion { $null }
+    { Assert-BorcWingetConfigure } | Should -Throw '*winget is not installed*'
+  }
+
+  It 'leaves an installed tool alone, and installs a missing one' {
+    Mock Write-Host {}
+    Mock Invoke-InstallCommand { 0 }
+    Mock Test-BorcToolPresent { $Id -eq 'Microsoft.PowerShell' }
+    Install-BorcWingetPackage -Id 'Microsoft.PowerShell' -OnlyIfMissing
+    Should -Invoke Invoke-InstallCommand -Times 0 -Exactly
+    Install-BorcWingetPackage -Id 'Microsoft.DSC' -OnlyIfMissing
+    Should -Invoke Invoke-InstallCommand -Times 1 -Exactly -ParameterFilter { $Arguments -contains 'Microsoft.DSC' }
+  }
+
+  It 'still installs or upgrades everything without it' {
+    Mock Invoke-InstallCommand { 0 }
+    Mock Test-BorcToolPresent { $true }
+    Install-BorcWingetPackage -Id 'Git.Git'
+    Should -Invoke Invoke-InstallCommand -Times 1 -Exactly
+    Should -Invoke Test-BorcToolPresent -Times 0 -Exactly
   }
 }
 

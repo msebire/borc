@@ -59,6 +59,9 @@ The version number is chosen when the release is cut.
   end line around every `git` and `winget` command, a summary with each
   step's result and duration, and colours (`NO_COLOR` turns them off), in
   the `borc` command and in the installer.
+- `BORC_SKIP_UPDATES`, for managed computers: the installer keeps winget as it is
+  (after checking it can run configuration files) and installs Git, PowerShell 7
+  and Microsoft.DSC only if missing.
 - `BORC_BRANCH`, for maintainers: installs the engine from another branch
   to test it before release. Rerunning the installer without it goes back to
   `main`.

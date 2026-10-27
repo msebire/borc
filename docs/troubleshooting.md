@@ -26,6 +26,19 @@ Update App Installer from the Microsoft Store, then run the borc installer again
 Open the Microsoft Store, search for **App Installer**, update it, then run
 the one-liner again. Every step of the installer can be run again safely.
 
+Before that, the installer needs the PowerShell module
+`Microsoft.WinGet.Client` from the PowerShell Gallery. When it cannot get it,
+the message names the module instead:
+
+```
+Could not install the PowerShell module Microsoft.WinGet.Client, which borc uses to update winget: PowerShell Gallery is currently unavailable. ...
+```
+
+"Currently unavailable" means PowerShell could not reach the Gallery: a short
+Gallery outage, or a company network that blocks it or needs a proxy. Try
+again later, or keep the installed winget with `BORC_SKIP_UPDATES=1` (see the
+README, "On a managed computer"), which does not need the Gallery for winget.
+
 ## Controlled folder access
 
 When Defender's controlled folder access (ransomware protection) is on, it

@@ -13,6 +13,11 @@
   PowerShell prompt; the backtick keeps the outer shell from expanding it):
 
     powershell -NoProfile -ExecutionPolicy Bypass -Command "`$env:BORC_BRANCH='my-branch'; irm https://raw.githubusercontent.com/msebire/borc/main/install.ps1 | iex"
+
+  On a computer where winget, Git or PowerShell 7 must stay as they are (a
+  managed work computer), set BORC_SKIP_UPDATES=1 the same way: the installer
+  then installs only what is missing, updates nothing, and checks that winget
+  can run configuration files.
 #>
 
 # Copy of $BorcRepoUrl in src\Borc\Constants.ps1: this file is downloaded
@@ -22,6 +27,12 @@ $BorcReleaseBranch = 'main'
 
 # winget exit codes that mean "already there" rather than a failure.
 $WingetAlreadyFine = @{ -1978335189 = 'no upgrade available'; -1978335135 = 'already installed' } # 0x8A15002B, 0x8A150061
+
+# The winget version borc's configuration file rules were verified with.
+$WingetVerifiedVersion = [version]'1.29.0'
+
+# The tools the installer needs, and the command that shows each one is there.
+$BorcTools = [ordered]@{ 'Git.Git' = 'git.exe'; 'Microsoft.PowerShell' = 'pwsh.exe'; 'Microsoft.DSC' = 'dsc.exe' }
 
 # The same look as the borc command: numbered steps, a start and an end line
 # around each external command, colours (off with NO_COLOR) and a summary.
@@ -146,7 +157,7 @@ function Update-BorcWinget {
     $module = Install-BorcGalleryModule -Name 'Microsoft.WinGet.Client'
     Import-Module -Name $module -ErrorAction Stop
   } catch {
-    throw "Could not install the PowerShell module Microsoft.WinGet.Client, which borc uses to update winget: $($_.Exception.Message)"
+    throw "Could not install the PowerShell module Microsoft.WinGet.Client, which borc uses to update winget: $($_.Exception.Message)`nIf the PowerShell Gallery is down or blocked on this network, run the installer with BORC_SKIP_UPDATES=1: it keeps the installed winget and does not need the Gallery for it."
   }
   try {
     Write-InstallLine -Text '  > Repair-WinGetPackageManager -Latest'
@@ -163,8 +174,50 @@ function Update-BorcSessionPath {
   $env:Path = "$machine;$user"
 }
 
-function Install-BorcWingetPackage {
+# BORC_SKIP_UPDATES, read from this process only like BORC_BRANCH: install what
+# is missing, update nothing.
+function Test-BorcSkipUpdates {
+  if ($env:BORC_SKIP_UPDATES -notmatch '^(1|true|yes)$') { return $false }
+  Write-Warning 'BORC_SKIP_UPDATES is set: winget, Git, PowerShell 7 and Microsoft.DSC are installed only if missing, and never updated.'
+  $true
+}
+
+function Get-BorcWingetVersion {
+  $text = "$(& winget --version 2>$null)"
+  if ($LASTEXITCODE -ne 0 -or $text -notmatch '(\d+)\.(\d+)\.(\d+)') { return $null }
+  [version]"$($Matches[1]).$($Matches[2]).$($Matches[3])"
+}
+
+# With the update skipped, winget must still be able to run configuration
+# files: borc cannot work without winget configure.
+function Assert-BorcWingetConfigure {
+  $version = Get-BorcWingetVersion
+  if (-not $version) {
+    throw "winget is not installed, and BORC_SKIP_UPDATES stops the installer from installing it. Install App Installer from the Microsoft Store, or run the installer without BORC_SKIP_UPDATES."
+  }
+  & winget configure --help 2>$null | Out-Null
+  if ($LASTEXITCODE -ne 0) {
+    throw "winget $version cannot run configuration files (winget configure), which borc needs. Update App Installer from the Microsoft Store, or run the installer without BORC_SKIP_UPDATES."
+  }
+  if ($version -lt $WingetVerifiedVersion) {
+    Write-Warning "winget $version is older than $WingetVerifiedVersion, the version borc's configuration files were checked with. borc apply may fail on the dscv3 processor; if it does, update App Installer."
+  }
+  Write-InstallLine -Text "  winget $version can run configuration files; not updated (BORC_SKIP_UPDATES)."
+}
+
+function Test-BorcToolPresent {
   param([Parameter(Mandatory = $true)] [string] $Id)
+  if (Get-Command -Name $BorcTools[$Id] -CommandType Application -ErrorAction SilentlyContinue) { return $true }
+  & winget list --id $Id --exact --accept-source-agreements --disable-interactivity 2>$null | Out-Null
+  $LASTEXITCODE -eq 0
+}
+
+function Install-BorcWingetPackage {
+  param([Parameter(Mandatory = $true)] [string] $Id, [switch] $OnlyIfMissing)
+  if ($OnlyIfMissing -and (Test-BorcToolPresent -Id $Id)) {
+    Write-InstallLine -Text "  $Id is installed; not updated (BORC_SKIP_UPDATES)."
+    return
+  }
   $arguments = @('install', '--id', $Id, '--exact', '--source', 'winget', '--accept-package-agreements', '--accept-source-agreements', '--disable-interactivity')
   $code = Invoke-InstallCommand -FilePath 'winget' -Arguments $arguments -OkCodes $WingetAlreadyFine
   if ($code -ne 0 -and -not $WingetAlreadyFine.ContainsKey($code)) {
@@ -213,10 +266,17 @@ function Install-Borc {
     Initialize-BorcSession
     Start-InstallStep -Name 'Windows version'
     Assert-BorcWindowsVersion
-    Start-InstallStep -Name 'Updating winget'
-    Update-BorcWinget
-    Start-InstallStep -Name 'Git, PowerShell 7 and Microsoft.DSC'
-    foreach ($id in @('Git.Git', 'Microsoft.PowerShell', 'Microsoft.DSC')) { Install-BorcWingetPackage -Id $id }
+    $skipUpdates = Test-BorcSkipUpdates
+    if ($skipUpdates) {
+      Start-InstallStep -Name 'winget: checking it can run configuration files (update skipped)'
+      Assert-BorcWingetConfigure
+      Start-InstallStep -Name 'Git, PowerShell 7 and Microsoft.DSC, if missing (updates skipped)'
+    } else {
+      Start-InstallStep -Name 'Updating winget'
+      Update-BorcWinget
+      Start-InstallStep -Name 'Git, PowerShell 7 and Microsoft.DSC'
+    }
+    foreach ($id in $BorcTools.Keys) { Install-BorcWingetPackage -Id $id -OnlyIfMissing:$skipUpdates }
     Update-BorcSessionPath
     $branch = Get-BorcEngineBranch
     $engine = Join-Path $env:LOCALAPPDATA 'borc\engine'
