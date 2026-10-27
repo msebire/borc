@@ -4,6 +4,38 @@ Latest report on top.
 
 ---
 
+## Step 21: the new-terminal note (2026-10-27)
+
+### Done
+
+- **The note:** after a successful install, `install.ps1` ends with "Open a
+  new terminal to use borc", and one line that reloads `PATH`,
+  `BORC_SETTINGS` and `BORC_HOME` from the user environment, to use the
+  `borc` command in the same PowerShell window.
+- **Why it can't be automatic:** the one-liner runs the installer in a child
+  process, and a process cannot change its parent's environment.
+- **Docs:** the README Install section and `CHANGELOG.md`.
+- **Tests:** the note's text, the reload line running in PowerShell 7 and
+  Windows PowerShell 5.1, and the note shown only after success. 271 tests
+  pass.
+
+### Assumptions
+
+- **cmd users** open a new terminal: the reload line is for PowerShell only.
+
+### Questions
+
+- None.
+
+### Deviations
+
+- None.
+
+### To verify
+
+- Nothing new.
+
+---
 ## Step 20: BORC_SKIP_UPDATES (2026-10-27)
 
 ### Done

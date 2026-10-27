@@ -259,6 +259,17 @@ function Install-BorcEngine {
   }
 }
 
+# The terminal that started the installer keeps its old environment: a process
+# cannot change its parent's. This line reloads what setup saved for the user.
+$BorcReloadLine = '$env:Path = [Environment]::GetEnvironmentVariable(''Path'', ''Machine'') + '';'' + [Environment]::GetEnvironmentVariable(''Path'', ''User''); $env:BORC_SETTINGS = [Environment]::GetEnvironmentVariable(''BORC_SETTINGS'', ''User''); $env:BORC_HOME = [Environment]::GetEnvironmentVariable(''BORC_HOME'', ''User'')'
+
+function Write-BorcNewTerminalNote {
+  Write-InstallLine -Text ''
+  Write-InstallLine -Text 'Open a new terminal to use borc: it loads the borc command, your borc/scripts and Tab completion.' -Color Cyan
+  Write-InstallLine -Text 'To use the borc command in this PowerShell window instead, run:'
+  Write-InstallLine -Text "  $BorcReloadLine"
+}
+
 function Install-Borc {
   $ErrorActionPreference = 'Stop'
   $status = 'failed'
@@ -290,6 +301,7 @@ function Install-Borc {
   } finally {
     Complete-InstallStep -Status $status
     Write-InstallSummary
+    if ($status -eq 'done') { Write-BorcNewTerminalNote }
   }
 }
 

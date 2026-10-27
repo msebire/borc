@@ -59,6 +59,7 @@ The version number is chosen when the release is cut.
   end line around every `git` and `winget` command, a summary with each
   step's result and duration, and colours (`NO_COLOR` turns them off), in
   the `borc` command and in the installer.
+- The installer ends by saying to open a new terminal, with a line that reloads`n  the `borc` command in the current PowerShell window instead.
 - `BORC_SKIP_UPDATES`, for managed computers: the installer keeps winget as it is
   (after checking it can run configuration files) and installs Git, PowerShell 7
   and Microsoft.DSC only if missing.

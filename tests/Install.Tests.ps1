@@ -113,6 +113,32 @@ Describe 'PowerShell Gallery modules for the installer' {
   }
 }
 
+Describe 'After the install' {
+  It 'says to open a new terminal, and gives the line that reloads this window' {
+    $script:Shown = New-Object System.Collections.ArrayList
+    Mock Write-Host { [void]$script:Shown.Add("$Object") }
+    Write-BorcNewTerminalNote
+    ($script:Shown -join "`n") | Should -Match 'Open a new terminal to use borc'
+    $script:Shown | Should -Contain "  $BorcReloadLine"
+  }
+
+  It 'gives a reload line that runs in PowerShell 7 and Windows PowerShell 5.1' {
+    # Running it only sets this child process's own variables, from the user ones.
+    $file = Join-Path ([IO.Path]::GetTempPath()) ("borc-test-reload-" + [guid]::NewGuid().ToString('N') + '.ps1')
+    [IO.File]::WriteAllText($file, $BorcReloadLine + "`n'reloaded'`n")
+    try {
+      pwsh -NoProfile -NonInteractive -File $file | Should -Be 'reloaded'
+      powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $file | Should -Be 'reloaded'
+    } finally {
+      Remove-Item -LiteralPath $file -Force
+    }
+  }
+
+  It 'only shows the note after a successful install' {
+    $script:InstallAst.Extent.Text | Should -Match "if \(\`$status -eq 'done'\) \{ Write-BorcNewTerminalNote \}"
+  }
+}
+
 Describe 'BORC_SKIP_UPDATES' {
   BeforeEach { $script:SavedSkip = $env:BORC_SKIP_UPDATES }
   AfterEach { $env:BORC_SKIP_UPDATES = $script:SavedSkip }

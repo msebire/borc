@@ -22,6 +22,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubus
 This works even when the execution policy blocks scripts. The policy is
 bypassed for this one process and left as it is.
 
+When it is done, open a new terminal: the one you ran it from keeps its old
+environment, so `borc` is not found there yet. The installer ends with one line
+you can paste instead, to use the `borc` command in that same PowerShell
+window; your `borc/scripts` and Tab completion still come with a new
+PowerShell 7 terminal.
+
 ### On a managed computer
 
 The installer brings winget to its latest version and installs or upgrades
