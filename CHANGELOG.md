@@ -9,6 +9,11 @@ The version number is chosen when the release is cut.
 
 ## [Unreleased]
 
+### Fixed
+
+- A failed `borc apply` says when Windows now needs a restart, which may be why
+  units failed, such as a package that needs a Windows feature enabled in the same run.
+
 ## [0.1.1] - 2026-11-10
 
 ### Changed

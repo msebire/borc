@@ -907,6 +907,26 @@ Describe 'self-update' {
     }
   }
 
+  It 'says when a failed run left Windows waiting for a restart, and only then' {
+    InModuleScope borc {
+      $script:Shown = [System.Collections.Generic.List[string]]::new()
+      Mock Write-BorcLog { $script:Shown.Add($Message) }
+      Mock Write-BorcDocument {}
+      Mock Get-BorcRunFilePath { 'x.winget.yaml' }
+      Mock Write-BorcVcRuntimeHint {}
+      Mock Write-BorcWingetVersionHint {}
+      Mock Invoke-BorcWinget { -1978286075 }
+      $script:Checks = 0
+      Mock Test-BorcRestartPending { $script:Checks++; $script:Checks -gt 1 }
+      Invoke-BorcConfigureRun -Document @{} -Name 'reboot' | Should -Be 1
+      $script:Shown | Should -Contain 'Windows needs a restart, which may be why units failed. Restart, then run borc apply again.'
+      $script:Shown.Clear()
+      Mock Test-BorcRestartPending { $true }
+      Invoke-BorcConfigureRun -Document @{} -Name 'reboot' | Should -Be 1
+      $script:Shown | Should -Not -Contain 'Windows needs a restart, which may be why units failed. Restart, then run borc apply again.'
+    }
+  }
+
   It 'does not call the plain packages a recipe in --one-by-one' {
     InModuleScope borc {
       $script:Shown = [System.Collections.Generic.List[string]]::new()

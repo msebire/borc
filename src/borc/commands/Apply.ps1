@@ -220,6 +220,11 @@ function Invoke-BorcConfigureRun {
       Write-BorcConfigureNotEnabledHint
       return 1
     }
+    # A unit may have needed what an earlier unit only finishes after a restart,
+    # such as a package that needs a Windows feature it just enabled.
+    if (-not $restartBefore -and (Test-BorcRestartPending)) {
+      Write-BorcLog -Message 'Windows needs a restart, which may be why units failed. Restart, then run borc apply again.' -Level Warning
+    }
     Write-BorcVcRuntimeHint
     Write-BorcWingetVersionHint
     return 1

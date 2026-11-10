@@ -190,6 +190,17 @@ the configuration runs.
 BORC only stops when the restart became needed during its own run. A restart
 that was already pending before `borc apply` started does not stop it.
 
+A unit can also fail because of a restart an earlier unit made necessary, such as a
+package that needs a Windows feature enabled just before. When a failed run leaves
+Windows waiting for a restart, `borc apply` adds:
+
+```
+Warning: Windows needs a restart, which may be why units failed. Restart, then run borc apply again.
+```
+
+Restart and run `borc apply` again before looking further: the enabled feature then
+works, and the units that failed usually apply.
+
 ## borc apply refuses to pull
 
 ```
