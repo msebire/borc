@@ -9,6 +9,10 @@ The version number is chosen when the release is cut.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-10
+
+The first release.
+
 ### Added
 
 - `install.ps1`, the one-line installer: from a blank Windows machine to a working
