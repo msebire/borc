@@ -13,14 +13,24 @@ repo that apps read from directly. It is built on WinGet Configuration
 
 ## Install
 
-Open a terminal (Windows Terminal, PowerShell or cmd) and run:
+Open Windows PowerShell (on a new machine, the default tab of Windows
+Terminal) and run:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/msebire/borc/main/install.ps1 | iex"
+irm https://raw.githubusercontent.com/msebire/borc/main/install.ps1 | iex
 ```
 
-This works even when the execution policy blocks scripts. The policy is
-bypassed for this one process and left as it is.
+This works even when the execution policy blocks scripts: the policy does not
+apply to a command run this way, and the installer bypasses it for that window
+only, leaving the machine's setting as it is.
+
+Do not wrap it in `powershell -ExecutionPolicy Bypass -Command "..."`, as some
+installers do: Microsoft Defender blocks that command line as a Trojan. To read
+the script before running it, download it with
+`irm https://raw.githubusercontent.com/msebire/borc/main/install.ps1 -OutFile install.ps1`,
+then run `.\install.ps1` from Windows PowerShell; if the execution policy refuses
+it, run `Set-ExecutionPolicy -Scope Process Bypass` first, which lasts for that
+window only.
 
 When it is done, open a new terminal: the one you ran it from keeps its old
 environment, so `borc` is not found there yet. The installer ends with one line
@@ -35,11 +45,11 @@ Git, PowerShell 7 and Microsoft.DSC. It also installs the VC++ runtime when
 Windows lacks it, as `winget configure` needs it for elevated units; with or
 without the variable below, that only happens when it is missing, and it may show
 a UAC prompt. Where those tools must stay as they are, or
-where the PowerShell Gallery is blocked, set `BORC_SKIP_UPDATES` for that one
-command, from a PowerShell prompt:
+where the PowerShell Gallery is blocked, set `BORC_SKIP_UPDATES` in the same
+window:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -Command "`$env:BORC_SKIP_UPDATES='1'; irm https://raw.githubusercontent.com/msebire/borc/main/install.ps1 | iex"
+$env:BORC_SKIP_UPDATES='1'; irm https://raw.githubusercontent.com/msebire/borc/main/install.ps1 | iex
 ```
 
 - winget is not updated, and the PowerShell Gallery is not used for it. The
@@ -48,7 +58,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "`$env:BORC_SKIP_UPDATES=
   1.29, the version BORC was checked with, gets a warning.
 - Git, PowerShell 7 and Microsoft.DSC are installed only if they are missing,
   never upgraded.
-- The variable is never stored: the next run without it updates as usual.
+- The variable is never stored: it lasts until you close that window, and the
+  next run in a new window updates as usual.
 
 ## Five-minute quick start
 
@@ -117,10 +128,10 @@ a real machine.
 ### Testing a branch before releasing it
 
 To try unreleased work on a machine, usually `develop` or a feature branch,
-set `BORC_BRANCH` for the installer's process only, from a PowerShell prompt:
+set `BORC_BRANCH` in the Windows PowerShell window that runs the installer:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -Command "`$env:BORC_BRANCH='my-branch'; irm https://raw.githubusercontent.com/msebire/borc/my-branch/install.ps1 | iex"
+$env:BORC_BRANCH='my-branch'; irm https://raw.githubusercontent.com/msebire/borc/my-branch/install.ps1 | iex
 ```
 
 - The installer warns, then clones the engine on `my-branch`. On a machine
@@ -128,11 +139,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "`$env:BORC_BRANCH='my-br
 - From then on, the clone remembers the branch, not the variable: `borc`
   runs that branch, `borc self-update` follows it, even if it was rewritten, and
   `borc apply` notices when the branch has moved on.
-- To go back to the release, run the normal one-liner, without
+- To go back to the release, run the normal one-liner in a new window, without
   `BORC_BRANCH`. The installer switches the engine back to `main`.
 
-The variable is never stored, so a machine cannot stay on a test branch by
-accident. The URL above takes `install.ps1` from the branch itself, which
+The variable is never stored, and lasts only until that window is closed, so a
+machine cannot stay on a test branch by accident. The URL above takes `install.ps1` from the branch itself, which
 also tests your changes to the installer.
 
 ## License

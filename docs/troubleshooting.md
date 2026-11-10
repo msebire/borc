@@ -13,6 +13,24 @@ The configuration files BORC generated for the run sit next to it, with the
 same name: `...-apply.reboot.winget.yaml` and `...-apply.main.winget.yaml`.
 BORC keeps the last 20 runs. Secret values never appear in either.
 
+## Microsoft Defender blocks the installer
+
+```
+The terminator '#>' is missing from the multiline comment.
+```
+
+with a Defender alert, **Threat blocked**, category Trojan, whose affected item is
+a command line starting with `powershell.exe -NoProfile -ExecutionPolicy Bypass
+-Command irm https://raw.githubusercontent.com/...`. That form wraps the installer
+in a second PowerShell, which is how malware usually runs a download, so Defender
+removes it and nothing runs. It was the documented one-liner before 2026-11-10.
+
+Run the installer from a Windows PowerShell window instead, as the README shows:
+
+```powershell
+irm https://raw.githubusercontent.com/msebire/borc/main/install.ps1 | iex
+```
+
 ## The installer cannot update winget
 
 The installer updates winget with `Repair-WinGetPackageManager -Latest`. When

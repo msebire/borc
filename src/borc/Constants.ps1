@@ -22,5 +22,5 @@ function Get-BorcRawUrl {
 
 function Get-BorcOneLiner {
   $url = Get-BorcRawUrl -Path 'install.ps1'
-  "powershell -NoProfile -ExecutionPolicy Bypass -Command `"irm $url | iex`""
+  "irm $url | iex"
 }

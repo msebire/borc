@@ -165,12 +165,24 @@ listed as unreleased, and nobody has to guess the next number. Tags and the
 changelog tell people what changed, but the app never reads them, which keeps
 the installer and `self-update` simple: no tag lookup, no GitHub API.
 
+### The installer runs from a PowerShell window
+
+The first one-liner, `powershell -NoProfile -ExecutionPolicy Bypass -Command "irm
+... | iex"`, worked from cmd.exe as well. On 2026-11-10, Microsoft Defender blocked
+it as a Trojan on a new Windows 11 machine, judging the command line alone: a second
+PowerShell started with the policy bypassed to run a download is how malware works.
+The plain `irm ... | iex`, typed in Windows PowerShell, installed BORC on the same
+machine. The bypass flag was never needed: the execution policy does not apply to
+text run by `iex`, and the installer sets it for its own process. So the installer
+is documented for Windows PowerShell only, and the variables that adjust it are set
+in that window, where they last until it is closed.
+
 ### BORC_BRANCH for testing a branch
 
 A maintainer needs to try a branch on a real machine before it reaches
 `main`. `BORC_BRANCH` is read by the installer only, from its own process,
-and never stored: the engine clone itself remembers the branch, and the
-normal one-liner brings a machine back to `main`. A stored setting or a
+and never stored: it lasts until that window is closed, the engine clone itself
+remembers the branch, and the normal one-liner brings a machine back to `main`. A stored setting or a
 `borc` option would make it easy to leave a machine on a test branch without
 noticing, and would put a maintainer feature in front of every user.
 

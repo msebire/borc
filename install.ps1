@@ -1,7 +1,11 @@
 <#
-  BORC installer. Runs under Windows PowerShell 5.1:
+  BORC installer. Runs under Windows PowerShell 5.1, from a PowerShell window:
 
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/msebire/borc/main/install.ps1 | iex"
+    irm https://raw.githubusercontent.com/msebire/borc/main/install.ps1 | iex
+
+  Not through powershell -ExecutionPolicy Bypass -Command: Microsoft Defender
+  blocks that command line as a Trojan. The execution policy does not apply to
+  text run by iex, and the installer bypasses it for its own process only.
 
   It updates winget, installs Git, PowerShell 7 and Microsoft.DSC, and the VC++
   runtime if it is missing, clones the BORC engine into
@@ -10,10 +14,9 @@
   repo, the environment variables, the borc command, the profile block and
   borc apply. Every step checks first, so it can be run again safely.
 
-  To test an unreleased branch, set BORC_BRANCH for that one command (from a
-  PowerShell prompt; the backtick keeps the outer shell from expanding it):
+  To test an unreleased branch, set BORC_BRANCH in that window first:
 
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "`$env:BORC_BRANCH='my-branch'; irm https://raw.githubusercontent.com/msebire/borc/main/install.ps1 | iex"
+    $env:BORC_BRANCH='my-branch'; irm https://raw.githubusercontent.com/msebire/borc/my-branch/install.ps1 | iex
 
   On a computer where winget, Git or PowerShell 7 must stay as they are (a
   managed work computer), set BORC_SKIP_UPDATES=1 the same way: the installer

@@ -74,8 +74,9 @@ These checks install software and change the machine, so use a virtual machine o
 machine you can reinstall. Push `settings/` to a test repo, or leave the URL empty
 during the install and copy its `borc/` folder into `BORC_SETTINGS` afterwards.
 
-1. **The one-liner with a restricted execution policy.** It works, and
-   `Get-ExecutionPolicy -List` is the same before and after.
+1. **The one-liner with a restricted execution policy.** Typed in Windows PowerShell,
+   it works with no Defender alert, and `Get-ExecutionPolicy -List` is the same
+   before and after, apart from the Process scope of that window.
 2. **Empty URL and new branch.** An empty URL creates the starter repo with nothing
    committed, and `hello-borc` works in a new terminal. A new branch name lists the
    remote branches and creates the branch from the chosen one.

@@ -158,4 +158,15 @@ Describe 'Engine repository URL' {
     $oneLiner = InModuleScope borc { Get-BorcOneLiner }
     [IO.File]::ReadAllText((Join-Path $script:RepoRoot 'README.md')) | Should -Match ([regex]::Escape($oneLiner))
   }
+
+  It 'never tells anyone to run the installer through powershell -Command, which Defender blocks' {
+    $files = @(Join-Path $script:RepoRoot 'README.md') + @(Get-ChildItem (Join-Path $script:RepoRoot 'docs') -Filter *.md -Recurse | ForEach-Object FullName)
+    $bad = foreach ($file in $files) {
+      $blocks = [regex]::Matches([IO.File]::ReadAllText($file), '(?ms)^```\w*\n(.*?)^```')
+      foreach ($block in $blocks) {
+        if ($block.Groups[1].Value -match 'powershell(\.exe)?\s.*-Command.*install\.ps1') { "$(Split-Path -Leaf $file): $($Matches[0])" }
+      }
+    }
+    $bad | Should -BeNullOrEmpty
+  }
 }

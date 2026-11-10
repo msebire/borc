@@ -9,6 +9,12 @@ The version number is chosen when the release is cut.
 
 ## [Unreleased]
 
+### Changed
+
+- The install one-liner is now `irm ... | iex`, run in a Windows PowerShell
+  window. Microsoft Defender blocks the former
+  `powershell -ExecutionPolicy Bypass -Command` form as a Trojan.
+
 ## [0.1.0] - 2026-11-10
 
 The first release.
