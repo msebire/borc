@@ -1,0 +1,13 @@
+recipes:
+  - repo: https://github.com/someone/recipes.git
+  - repo: https://github.com/acme/recipes.git
+    alias: acme
+apps:
+  - winget: Git.Git
+  - msstore: 9NBLGGH4NNS1
+  - recipe: recipes/node
+    parameters:
+      npmCache: D:\caches\npm
+  - recipe: '@local/wsl-ubuntu'
+secrets:
+  NPM_TOKEN: token for the company npm registry

@@ -1,0 +1,6 @@
+      testScript: |
+        param($path)
+        (npm config get cache) -eq $path
+      setScript: |
+        param($path)
+        npm config set cache $path

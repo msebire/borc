@@ -1,0 +1,7 @@
+borc:
+  description: Node.js LTS and npm     # shown by borc search
+  requires: [recipes/git]              # recipes that must run first
+  reboot: false                        # true: may need a restart, runs first
+  parameters:
+    npmCache: npm cache location (optional)
+  secrets: [NPM_TOKEN]                 # secrets the recipe reads

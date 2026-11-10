@@ -1,0 +1,13 @@
+  - name: app settings link
+    type: Microsoft.DSC.Transitional/PowerShellScript
+    metadata:
+      securityContext: elevated
+    properties:
+      input: SomeApp
+      testScript: |
+        param($app)
+        $link = Get-Item -LiteralPath (Join-Path $env:APPDATA $app) -ErrorAction SilentlyContinue
+        [bool]($link -and $link.LinkType -eq 'SymbolicLink')
+      setScript: |
+        param($app)
+        New-Item -ItemType SymbolicLink -Path (Join-Path $env:APPDATA $app) -Target (Join-Path $env:BORC_SETTINGS $app) | Out-Null
