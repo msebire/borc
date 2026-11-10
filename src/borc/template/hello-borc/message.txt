@@ -1,0 +1,3 @@
+Hello from BORC!
+This message comes from hello-borc\message.txt in your config repo. Edit it, and
+this command says something else: your settings live in Git.

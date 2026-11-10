@@ -1,0 +1,41 @@
+# Example recipe: adds the command hello-borc, which prints a message kept in
+# this repo. Copy this file to write your own recipe. To remove it, delete this
+# file, its line in borc.yaml, the hello-borc folder and
+# %LOCALAPPDATA%\borc\bin\hello-borc.cmd.
+# Docs: https://github.com/msebire/borc/blob/main/docs/writing-recipes.md
+#
+# Layout under BORC_SETTINGS:
+#   hello-borc/message.txt    the message hello-borc prints
+borc:
+  description: Example recipe, adds the command hello-borc
+  # requires: [recipes/git]     recipes that must run first
+  # reboot: true                may need a restart, so it runs first
+  # parameters:                 optional values, used as {{name}} in input
+  #   greeting: text to show
+  # secrets: [NPM_TOKEN]        secrets it reads, declared in borc.yaml
+$schema: https://raw.githubusercontent.com/PowerShell/DSC/main/schemas/2023/08/config/document.json
+metadata:
+  winget:
+    processor: dscv3
+resources:
+  # To install an app, use a package unit:
+  # - name: my app
+  #   type: Microsoft.WinGet/Package
+  #   properties:
+  #     id: Publisher.App
+  #     source: winget
+
+  # A script unit: testScript says whether it is already in place (exactly one
+  # boolean), and setScript only runs when it is not. input is its one param.
+  # For admin rights, add: metadata: { securityContext: elevated }
+  - name: hello-borc command
+    type: Microsoft.DSC.Transitional/PowerShellScript
+    properties:
+      input: hello-borc.cmd
+      testScript: |
+        param($file)
+        Test-Path -LiteralPath (Join-Path $env:LOCALAPPDATA "borc\bin\$file")
+      setScript: |
+        param($file)
+        $command = '@type "%BORC_SETTINGS%\hello-borc\message.txt"'
+        Set-Content -LiteralPath (Join-Path $env:LOCALAPPDATA "borc\bin\$file") -Value $command
