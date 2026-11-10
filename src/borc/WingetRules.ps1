@@ -56,6 +56,12 @@ $script:WingetTestInState = 'System is in the described configuration state.'
 $script:WingetTestNotInState = 'System is not in the described configuration state.'
 $script:WingetTestFailed = 'The configuration unit failed while attempting to test the current system state.'
 
+# winget configure with its extended features off, seen on 2026-11-10 on a new
+# Windows 11 machine: it prints "Extended features are not enabled. Run `winget
+# configure --enable` to enable them." and runs nothing. winget error names this
+# code APPINSTALLER_CLI_ERROR_PACKAGE_IS_STUB, which is not what happened here.
+$script:WingetConfigureNotEnabled = 0x8A150069
+
 # winget exit codes that do not mean a failure for upgrade and uninstall.
 $script:WingetNoApplicableUpgrade = 0x8A15002B
 $script:WingetNoPackageFound = 0x8A150014

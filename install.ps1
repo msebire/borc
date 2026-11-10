@@ -184,6 +184,17 @@ function Update-BorcWinget {
     throw "winget could not be updated: $($_.Exception.Message)`nUpdate App Installer from the Microsoft Store, then run the BORC installer again."
   }
 }
+
+# winget configure refuses to run any file until its extended features are
+# enabled, which a new machine may not have. Enabling them needs the Store; a
+# failure does not stop the installer, and borc apply then says what to run.
+function Enable-BorcWingetConfigure {
+  $code = Invoke-InstallCommand -FilePath 'winget' -Arguments @('configure', '--enable', '--disable-interactivity')
+  if ($code -ne 0) {
+    Write-Warning "winget could not enable its configuration features (exit code $(Format-InstallExitCode -Code $code)). borc apply will fail until they are: run winget configure --enable, then borc apply."
+  }
+}
+
 function Update-BorcSessionPath {
   $machine = [Environment]::GetEnvironmentVariable('Path', 'Machine')
   $user = [Environment]::GetEnvironmentVariable('Path', 'User')
@@ -344,6 +355,7 @@ function Install-Borc {
       Update-BorcWinget
       Start-InstallStep -Name 'Git, PowerShell 7 and Microsoft.DSC'
     }
+    Enable-BorcWingetConfigure
     Install-BorcVcRuntime
     foreach ($id in $BorcTools.Keys) { Install-BorcWingetPackage -Id $id -OnlyIfMissing:$skipUpdates }
     Update-BorcSessionPath

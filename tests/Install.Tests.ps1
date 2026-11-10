@@ -242,6 +242,22 @@ Describe 'VC++ runtime' {
   }
 }
 
+Describe 'winget configure features' {
+  It 'enables them, in both installer paths' {
+    Mock Invoke-InstallCommand { 0 }
+    Enable-BorcWingetConfigure 3>$null
+    Should -Invoke Invoke-InstallCommand -Times 1 -Exactly -ParameterFilter { $FilePath -eq 'winget' -and ($Arguments -join ' ') -eq 'configure --enable --disable-interactivity' }
+    $install = $script:InstallAst.FindAll({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Install-Borc' }, $true)[0].Extent.Text
+    $install | Should -Match '\}\s*\n\s*Enable-BorcWingetConfigure\s*\n'
+  }
+
+  It 'warns and goes on when they cannot be enabled' {
+    Mock Invoke-InstallCommand { 1 }
+    { Enable-BorcWingetConfigure 3>$null } | Should -Not -Throw
+    Enable-BorcWingetConfigure 3>&1 | Where-Object { $_ -is [System.Management.Automation.WarningRecord] } | Should -Match 'winget configure --enable'
+  }
+}
+
 Describe 'BORC_SKIP_UPDATES' {
   BeforeEach { $script:SavedSkip = $env:BORC_SKIP_UPDATES }
   AfterEach { $env:BORC_SKIP_UPDATES = $script:SavedSkip }

@@ -15,6 +15,11 @@ The version number is chosen when the release is cut.
   window. Microsoft Defender blocks the former
   `powershell -ExecutionPolicy Bypass -Command` form as a Trojan.
 
+### Fixed
+
+- The installer enables winget's configuration features, which a new machine may
+  have off, and `borc apply` says how to enable them when winget refuses to run.
+
 ## [0.1.0] - 2026-11-10
 
 The first release.

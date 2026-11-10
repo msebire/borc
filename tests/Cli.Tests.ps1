@@ -891,6 +891,22 @@ Describe 'self-update' {
     }
   }
 
+  It 'says to enable winget configure when it ran nothing for that reason, and gives no other hint' {
+    InModuleScope borc {
+      $script:Shown = [System.Collections.Generic.List[string]]::new()
+      Mock Write-BorcLog { $script:Shown.Add($Message) }
+      Mock Write-BorcDocument {}
+      Mock Get-BorcRunFilePath { 'x.winget.yaml' }
+      Mock Test-BorcRestartPending { $false }
+      Mock Write-BorcVcRuntimeHint { throw 'no other hint' }
+      Mock Write-BorcWingetVersionHint { throw 'no other hint' }
+      Mock Invoke-BorcWinget { $script:WingetConfigureNotEnabled }
+      Invoke-BorcConfigureRun -Document @{} -Name 'main' | Should -Be 1
+      $script:Shown | Should -Contain 'winget configure ran nothing: its extended features are not enabled. Run winget configure --enable, then borc apply again.'
+      0x8A150069 | Should -Be -1978335127
+    }
+  }
+
   It 'does not call the plain packages a recipe in --one-by-one' {
     InModuleScope borc {
       $script:Shown = [System.Collections.Generic.List[string]]::new()

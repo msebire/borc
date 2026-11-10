@@ -357,6 +357,15 @@ merge a few prompts on a first install, which was not tested, and it would run e
 package elevated, against the aim of avoiding admin rights where possible. So they
 run as the user, and an installer that needs more asks for it itself.
 
+### winget configure features enabled by the installer
+
+On a new Windows 11 machine, `winget configure` refused to run any file because its
+extended features were off. There is no way to ask whether they are on, so the
+installer runs `winget configure --enable` every time, with or without
+`BORC_SKIP_UPDATES`: it changes no version, and BORC cannot work without it. It
+needs the Microsoft Store, which a managed computer may block, so a failure only
+warns, and `borc apply` names the command when winget stops for that reason.
+
 ### The VC++ runtime only when it is missing
 
 An old VC++ runtime makes every file with an elevated unit fail, with an error that

@@ -105,6 +105,28 @@ and exits with code 1.
 4. Fix the cause (or report it to the recipe repo), then run `borc apply`
    again. Units already in place are skipped.
 
+## winget configure ran nothing: extended features are not enabled
+
+```
+Extended features are not enabled. Run `winget configure --enable` to enable them.
+```
+
+`borc apply` then fails at once with exit code `0x8A150069` and says:
+
+```
+winget configure ran nothing: its extended features are not enabled. Run winget configure --enable, then borc apply again.
+```
+
+A new machine may come with these features off. The installer enables them, but
+that needs the Microsoft Store, so it only warns when it cannot. Run:
+
+```powershell
+winget configure --enable
+```
+
+then `borc apply` again. `winget error 0x8A150069` describes the code as a stub
+package, which is not what happened here.
+
 ## Every unit fails with an internal error
 
 ```

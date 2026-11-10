@@ -277,7 +277,10 @@ function Invoke-BorcRecipeCheck {
   $parsed = ConvertFrom-BorcConfigureTest -Lines $test.Output
   $okCodes = if ($parsed.Count -gt 0) { @{ $test.ExitCode = "$($parsed.Count) unit(s) tested" } } else { @{} }
   Write-BorcCommandEnd -ExitCode $test.ExitCode -Duration ((Get-Date) - $started) -OkCodes $okCodes
-  if ($parsed.Count -eq 0) { Write-BorcLog -Message 'winget gave no result for any unit; see the log. Recipes show as "may be applied".' -Level Warning }
+  if ($parsed.Count -eq 0) {
+    Write-BorcLog -Message 'winget gave no result for any unit; see the log. Recipes show as "may be applied".' -Level Warning
+    if ($test.ExitCode -eq $script:WingetConfigureNotEnabled) { Write-BorcConfigureNotEnabledHint }
+  }
   foreach ($name in $parsed.Keys) { $results[$name] = $parsed[$name] }
   $results
 }

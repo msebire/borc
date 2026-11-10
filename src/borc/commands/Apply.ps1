@@ -216,6 +216,10 @@ function Invoke-BorcConfigureRun {
   $code = Invoke-BorcWinget -Arguments (@('configure', '--file', $path) + $script:WingetConfigureArguments)
   if ($code -ne 0) {
     Write-BorcLog -Message "winget configure reported a failure, exit code $(Format-BorcExitCode -Code $code). Its errors are shown above." -Level Error
+    if ($code -eq $script:WingetConfigureNotEnabled) {
+      Write-BorcConfigureNotEnabledHint
+      return 1
+    }
     Write-BorcVcRuntimeHint
     Write-BorcWingetVersionHint
     return 1
@@ -225,6 +229,10 @@ function Invoke-BorcConfigureRun {
     return $script:BorcRestartExitCode
   }
   0
+}
+
+function Write-BorcConfigureNotEnabledHint {
+  Write-BorcLog -Message 'winget configure ran nothing: its extended features are not enabled. Run winget configure --enable, then borc apply again.'
 }
 
 # Without this runtime, winget only reports an internal error with a number. The

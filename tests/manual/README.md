@@ -120,7 +120,11 @@ during the install and copy its `borc/` folder into `BORC_SETTINGS` afterwards.
     and ends with `is now at`. `borc upgrade` then shows what is installed if it differs.
 17. **`--what-if --check` with an elevated unit.** One UAC prompt, then a definite
     verdict for that unit.
-18. **Readable output.** The shield icon and winget's accents and ellipses show properly
+18. **winget configure features.** On a machine where `borc apply` reported
+    "Extended features are not enabled", the installer's `winget configure --enable`
+    succeeds, also when run a second time, and note whether it needed an elevated
+    window. `borc apply` then runs.
+19. **Readable output.** The shield icon and winget's accents and ellipses show properly
     in the console and in the log, and the console's code page is unchanged afterwards.
 
 Windows 10 22H2 is best effort: the installer warns and goes on, and the same checks

@@ -44,7 +44,9 @@ The installer brings winget to its latest version and installs or upgrades
 Git, PowerShell 7 and Microsoft.DSC. It also installs the VC++ runtime when
 Windows lacks it, as `winget configure` needs it for elevated units; with or
 without the variable below, that only happens when it is missing, and it may show
-a UAC prompt. Where those tools must stay as they are, or
+a UAC prompt. It runs `winget configure --enable` too, which turns on the
+configuration features BORC needs and uses the Microsoft Store. Where those tools
+must stay as they are, or
 where the PowerShell Gallery is blocked, set `BORC_SKIP_UPDATES` in the same
 window:
 
