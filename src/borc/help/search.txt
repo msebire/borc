@@ -1,0 +1,7 @@
+Usage: borc search <term>
+
+Searches recipe names and descriptions in the local clones of the recipe
+repos and in borc/cookbook/, then runs winget search <term>.
+
+Options:
+  -h, --help  Show this page.

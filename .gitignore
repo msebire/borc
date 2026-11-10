@@ -14,7 +14,6 @@ coverage.xml
 
 # Build output
 out/
-build/
 dist/
 *.nupkg
 
@@ -25,3 +24,6 @@ logs/
 # Windows
 Thumbs.db
 desktop.ini
+
+# The maintainer's running report, kept locally.
+REPORT.md
