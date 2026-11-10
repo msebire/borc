@@ -1,0 +1,529 @@
+﻿BeforeAll {
+  . (Join-Path $PSScriptRoot 'TestHelpers.ps1')
+  $script:InstallPath = Join-Path $script:RepoRoot 'install.ps1'
+
+  # Loads the functions and top-level variables of install.ps1 without running it.
+  $tokens = $null
+  $parseErrors = $null
+  $script:InstallAst = [System.Management.Automation.Language.Parser]::ParseFile($script:InstallPath, [ref]$tokens, [ref]$parseErrors)
+  foreach ($function in $script:InstallAst.FindAll({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $false)) {
+    . ([scriptblock]::Create($function.Extent.Text))
+  }
+  foreach ($statement in $script:InstallAst.EndBlock.Statements | Where-Object { $_ -is [System.Management.Automation.Language.AssignmentStatementAst] }) {
+    . ([scriptblock]::Create($statement.Extent.Text))
+  }
+
+  function Invoke-TestGit {
+    # Plain $args: an advanced function would read -C as one of its own parameters.
+    $output = & git -c user.name=borc-test -c user.email=borc-test@example.invalid -c init.defaultBranch=main -c core.autocrlf=false @args 2>&1
+    if ($LASTEXITCODE -ne 0) { throw "git $args failed: $output" }
+  }
+}
+
+Describe 'install.ps1' {
+  It 'parses under Windows PowerShell 5.1' {
+    $command = "`$e = `$null; [System.Management.Automation.Language.Parser]::ParseFile('$script:InstallPath', [ref]`$null, [ref]`$e) | Out-Null; `$e.Count"
+    powershell.exe -NoProfile -NonInteractive -Command $command | Should -Be '0'
+  }
+
+  It 'has no BOM and only ASCII characters, so irm | iex reads it unchanged' {
+    $bytes = [IO.File]::ReadAllBytes($script:InstallPath)
+    ($bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) | Should -BeFalse
+    @($bytes | Where-Object { $_ -gt 0x7F }).Count | Should -Be 0
+  }
+
+  It 'parses under Windows PowerShell 5.1 when decoded as irm would decode it' {
+    # irm returns the raw text: no BOM is skipped, and the charset may be guessed.
+    $command = @"
+`$bytes = [IO.File]::ReadAllBytes('$script:InstallPath')
+foreach (`$encoding in 'utf-8', 'windows-1252') {
+  `$errors = `$null
+  [System.Management.Automation.Language.Parser]::ParseInput([Text.Encoding]::GetEncoding(`$encoding).GetString(`$bytes), [ref]`$null, [ref]`$errors) | Out-Null
+  `$errors.Count
+}
+"@
+    powershell.exe -NoProfile -NonInteractive -Command $command | Should -Be @('0', '0')
+  }
+
+  It 'accepts Windows 11, warns on Windows 10 22H2 and refuses older builds' {
+    { Assert-BorcWindowsVersion -Build 22631 } | Should -Not -Throw
+    Assert-BorcWindowsVersion -Build 19045 3>&1 | Should -Match 'Windows 10 22H2'
+    { Assert-BorcWindowsVersion -Build 19044 } | Should -Throw '*build 19044*'
+  }
+
+  It 'changes the execution policy for the process only' {
+    $script:InstallAst.Extent.Text | Should -Match 'Set-ExecutionPolicy -Scope Process'
+    $script:InstallAst.Extent.Text | Should -Not -Match 'Set-ExecutionPolicy (?!-Scope Process)'
+    $script:InstallAst.Extent.Text | Should -Not -Match 'Set-PSRepository|InstallationPolicy'
+  }
+
+  It 'never exits the host, so irm | iex keeps the window open' {
+    $script:InstallAst.FindAll({ param($node) $node -is [System.Management.Automation.Language.ExitStatementAst] }, $true) | Should -BeNullOrEmpty
+  }
+
+  It 'keeps the same repo URL as Constants.ps1' {
+    $url = InModuleScope borc { $script:BorcRepoUrl }
+    [IO.File]::ReadAllText($script:InstallPath) | Should -Match ([regex]::Escape("`$BorcRepoUrl = '$url'"))
+  }
+
+  It 'shows the one-liner the docs give' {
+    $oneLiner = InModuleScope borc { Get-BorcOneLiner }
+    [IO.File]::ReadAllText($script:InstallPath) | Should -Match ([regex]::Escape($oneLiner))
+  }
+}
+
+Describe 'PowerShell Gallery modules for the installer' {
+  BeforeEach { $script:Folder = New-TestFolder }
+  AfterEach { Remove-Item -LiteralPath $script:Folder -Recurse -Force }
+
+  It 'never installs into Documents: no Install-Module anywhere in install.ps1' {
+    $script:InstallAst.FindAll({ param($node) $node -is [System.Management.Automation.Language.CommandAst] -and $node.GetCommandName() -eq 'Install-Module' }, $true) | Should -BeNullOrEmpty
+  }
+
+  It 'saves a missing module into borc''s own folder and returns its path' {
+    Mock Write-Host {}
+    Mock Get-Module { $null }
+    Mock Get-PackageProvider { [pscustomobject]@{ Version = [version]'2.8.5.208' } }
+    Mock Save-Module {}
+    Install-BorcGalleryModule -Name 'Microsoft.WinGet.Client' -Folder $script:Folder | Should -Be (Join-Path $script:Folder 'Microsoft.WinGet.Client')
+    Should -Invoke Save-Module -Times 1 -Exactly -ParameterFilter { $Name -eq 'Microsoft.WinGet.Client' -and $Path -eq $script:Folder }
+  }
+
+  It 'reuses a module it saved before, without going online' {
+    New-Item -ItemType Directory -Path (Join-Path $script:Folder 'Microsoft.WinGet.Client') | Out-Null
+    Mock Save-Module { throw 'must not save again' }
+    Install-BorcGalleryModule -Name 'Microsoft.WinGet.Client' -Folder $script:Folder | Should -Be (Join-Path $script:Folder 'Microsoft.WinGet.Client')
+  }
+
+  It 'names the module, not App Installer, when the module cannot be installed' {
+    Mock Install-BorcGalleryModule { throw "Could not find a part of the path 'C:\Users\x\Documents\WindowsPowerShell\Modules'." }
+    $message = try { Update-BorcWinget; '' } catch { $_.Exception.Message }
+    $message | Should -Match 'Could not install the PowerShell module Microsoft\.WinGet\.Client'
+    $message | Should -Match 'BORC_SKIP_UPDATES=1'
+    $message | Should -Not -Match 'App Installer'
+  }
+
+  It 'suggests App Installer only when winget itself cannot be updated' {
+    function Repair-WinGetPackageManager { param([switch] $Latest) }
+    Mock Write-Host {}
+    Mock Install-BorcGalleryModule { 'Microsoft.WinGet.Client' }
+    Mock Import-Module {}
+    Mock Repair-WinGetPackageManager { throw 'repair failed' }
+    { Update-BorcWinget } | Should -Throw '*winget could not be updated: repair failed*App Installer*'
+  }
+}
+
+Describe 'After the install' {
+  It 'says to open a new terminal, and gives the line that reloads this window' {
+    $script:Shown = New-Object System.Collections.ArrayList
+    Mock Write-Host { [void]$script:Shown.Add("$Object") }
+    Write-BorcNewTerminalNote
+    ($script:Shown -join "`n") | Should -Match 'Open a new terminal to use BORC'
+    $script:Shown | Should -Contain "  $BorcReloadLine"
+  }
+
+  It 'gives a reload line that runs in PowerShell 7 and Windows PowerShell 5.1' {
+    # Running it only sets this child process's own variables, from the user ones.
+    $file = Join-Path ([IO.Path]::GetTempPath()) ("borc-test-reload-" + [guid]::NewGuid().ToString('N') + '.ps1')
+    [IO.File]::WriteAllText($file, $BorcReloadLine + "`n'reloaded'`n")
+    try {
+      pwsh -NoProfile -NonInteractive -File $file | Should -Be 'reloaded'
+      powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $file | Should -Be 'reloaded'
+    } finally {
+      Remove-Item -LiteralPath $file -Force
+    }
+  }
+
+  It 'only shows the note after a successful install' {
+    $script:InstallAst.Extent.Text | Should -Match "if \(\`$status -eq 'done'\) \{ Write-BorcNewTerminalNote \}"
+  }
+
+  It 'says BORC is installed when only the first borc apply failed' {
+    $script:Shown = New-Object System.Collections.ArrayList
+    Mock Write-Host { [void]$script:Shown.Add("$Object") }
+    Write-BorcFirstApplyFailedNote
+    ($script:Shown -join "`n") | Should -Match 'BORC is installed, but its first borc apply did not finish'
+    ($script:Shown -join "`n") | Should -Match 'run borc apply in a new terminal'
+    $script:Shown | Should -Contain "  $BorcReloadLine"
+  }
+
+  It 'says what is left after a restart' {
+    $script:Shown = New-Object System.Collections.ArrayList
+    Mock Write-Host { [void]$script:Shown.Add("$Object") }
+    Write-BorcRestartNote
+    ($script:Shown -join "`n") | Should -Match 'BORC is installed, and Windows needs a restart'
+    ($script:Shown -join "`n") | Should -Match 'run borc apply in a new terminal'
+    $script:InstallAst.Extent.Text | Should -Match "if \(\`$status -eq 'restart'\) \{ Write-BorcRestartNote \}"
+  }
+
+  It 'keeps the same verified winget release as WingetRules.ps1' {
+    $rules = InModuleScope borc { $script:WingetVerifiedVersion }
+    "$($WingetVerifiedVersion.Major).$($WingetVerifiedVersion.Minor)" | Should -Be "$($rules.Major).$($rules.Minor)"
+  }
+
+  It 'keeps the same exit code for it as Constants.ps1' {
+    $BorcFirstApplyFailedExitCode | Should -Be (InModuleScope borc { $script:BorcFirstApplyFailedExitCode })
+  }
+
+  It 'gets that exit code from setup only when the apply failed, not when setup did' {
+    InModuleScope borc {
+      Mock Write-Host {}
+      Mock Start-BorcLog {}
+      Mock Stop-BorcLog {}
+      Mock Start-BorcStep {}
+      Mock Complete-BorcRun {}
+      Mock Install-BorcYamlModule {}
+      Mock Get-BorcFolderSetting { 'D:\borc-test-not-used' }
+      Mock Initialize-BorcSettingsInteractive {}
+      Mock New-Item {}
+      Mock Install-BorcRuntimeFiles {}
+      Mock Add-BorcUserPath {}
+      Mock Set-BorcUserEnvironmentVariable {}
+      Mock Update-BorcProfileBlockOrExplain { $false }
+      Mock Get-BorcProfilePath { 'not-used' }
+
+      Mock Invoke-Borc { 1 }
+      Invoke-BorcSetup | Should -Be $script:BorcFirstApplyFailedExitCode
+      Mock Invoke-Borc { 3010 }
+      Invoke-BorcSetup | Should -Be 3010
+      Mock Invoke-Borc { 0 }
+      Invoke-BorcSetup | Should -Be 0
+
+      Mock Install-BorcYamlModule { throw 'no gallery' }
+      Invoke-BorcSetup | Should -Be 1
+    }
+  }
+}
+
+Describe 'VC++ runtime' {
+  BeforeEach { $script:SavedArchitecture = $env:PROCESSOR_ARCHITECTURE }
+  AfterEach { $env:PROCESSOR_ARCHITECTURE = $script:SavedArchitecture }
+
+  It 'looks for the same file as the engine' {
+    $BorcVcRuntimeFile | Should -Be (InModuleScope borc { $script:BorcVcRuntimeFile })
+  }
+
+  It 'finds the file in the folder it is given' {
+    $folder = New-TestFolder
+    try {
+      Test-BorcVcRuntime -Folder $folder | Should -BeFalse
+      Set-Content -LiteralPath (Join-Path $folder $BorcVcRuntimeFile) -Value 'x'
+      Test-BorcVcRuntime -Folder $folder | Should -BeTrue
+    } finally {
+      Remove-Item -LiteralPath $folder -Recurse -Force
+    }
+  }
+
+  It 'installs nothing when the file is there' {
+    Mock Test-BorcVcRuntime { $true }
+    Mock Install-BorcWingetPackage {}
+    Install-BorcVcRuntime
+    Should -Invoke Install-BorcWingetPackage -Times 0 -Exactly
+  }
+
+  It 'installs the package of this architecture when the file is missing' {
+    Mock Write-Host {}
+    Mock Test-BorcVcRuntime { $false }
+    Mock Install-BorcWingetPackage {}
+    $env:PROCESSOR_ARCHITECTURE = 'AMD64'
+    Install-BorcVcRuntime
+    Should -Invoke Install-BorcWingetPackage -Times 1 -Exactly -ParameterFilter { $Id -eq 'Microsoft.VCRedist.2015+.x64' }
+    $env:PROCESSOR_ARCHITECTURE = 'ARM64'
+    Install-BorcVcRuntime
+    Should -Invoke Install-BorcWingetPackage -Times 1 -Exactly -ParameterFilter { $Id -eq 'Microsoft.VCRedist.2015+.arm64' }
+  }
+
+  It 'warns and goes on when it cannot be installed' {
+    Mock Write-Host {}
+    Mock Test-BorcVcRuntime { $false }
+    Mock Install-BorcWingetPackage { throw 'winget could not install it.' }
+    { Install-BorcVcRuntime 3>$null } | Should -Not -Throw
+    Install-BorcVcRuntime 3>&1 | Where-Object { $_ -is [System.Management.Automation.WarningRecord] } | Should -Match 'elevated units will fail'
+  }
+}
+
+Describe 'BORC_SKIP_UPDATES' {
+  BeforeEach { $script:SavedSkip = $env:BORC_SKIP_UPDATES }
+  AfterEach { $env:BORC_SKIP_UPDATES = $script:SavedSkip }
+
+  It 'is off unless set to 1, true or yes for the process, and warns when on' {
+    $env:BORC_SKIP_UPDATES = $null
+    Test-BorcSkipUpdates 3>$null | Should -BeFalse
+    $env:BORC_SKIP_UPDATES = 'no'
+    Test-BorcSkipUpdates 3>$null | Should -BeFalse
+    $env:BORC_SKIP_UPDATES = '1'
+    Test-BorcSkipUpdates 3>$null | Should -BeTrue
+    Test-BorcSkipUpdates 3>&1 | Where-Object { $_ -is [System.Management.Automation.WarningRecord] } | Should -Match 'installed only if missing, and never updated'
+  }
+
+  It 'accepts a winget that can run configuration files, without updating it' {
+    Mock Write-Host {}
+    Mock Get-BorcWingetVersion { [version]'1.29.380' }
+    Mock winget { $global:LASTEXITCODE = 0 }
+    { Assert-BorcWingetConfigure 3>$null } | Should -Not -Throw
+    Should -Invoke Write-Host -ParameterFilter { "$Object" -like '*winget 1.29.380 can run configuration files; not updated*' }
+  }
+
+  It 'warns about a winget older than the one BORC was checked with' {
+    Mock Write-Host {}
+    Mock Get-BorcWingetVersion { [version]'1.20.0' }
+    Mock winget { $global:LASTEXITCODE = 0 }
+    Assert-BorcWingetConfigure 3>&1 | Where-Object { $_ -is [System.Management.Automation.WarningRecord] } | Should -Match 'older than 1\.29\.0'
+  }
+
+  It 'stops when winget cannot run configuration files, or is missing' {
+    Mock Get-BorcWingetVersion { [version]'1.5.0' }
+    Mock winget { $global:LASTEXITCODE = -1978335230 }
+    { Assert-BorcWingetConfigure } | Should -Throw '*cannot run configuration files*BORC_SKIP_UPDATES*'
+    Mock Get-BorcWingetVersion { $null }
+    { Assert-BorcWingetConfigure } | Should -Throw '*winget is not installed*'
+  }
+
+  It 'leaves an installed tool alone, and installs a missing one' {
+    Mock Write-Host {}
+    Mock Invoke-InstallCommand { 0 }
+    Mock Test-BorcToolPresent { $Id -eq 'Microsoft.PowerShell' }
+    Install-BorcWingetPackage -Id 'Microsoft.PowerShell' -OnlyIfMissing
+    Should -Invoke Invoke-InstallCommand -Times 0 -Exactly
+    Install-BorcWingetPackage -Id 'Microsoft.DSC' -OnlyIfMissing
+    Should -Invoke Invoke-InstallCommand -Times 1 -Exactly -ParameterFilter { $Arguments -contains 'Microsoft.DSC' }
+  }
+
+  It 'still installs or upgrades everything without it' {
+    Mock Invoke-InstallCommand { 0 }
+    Mock Test-BorcToolPresent { $true }
+    Install-BorcWingetPackage -Id 'Git.Git'
+    Should -Invoke Invoke-InstallCommand -Times 1 -Exactly
+    Should -Invoke Test-BorcToolPresent -Times 0 -Exactly
+  }
+}
+
+Describe 'Installer output' {
+  BeforeEach {
+    $script:SavedNoColor = $env:NO_COLOR
+    $env:NO_COLOR = $null
+    $InstallSteps.List.Clear()
+    $InstallSteps.Current = $null
+    $script:Shown = New-Object System.Collections.ArrayList
+    Mock Write-Host { [void]$script:Shown.Add([pscustomobject]@{ Text = "$Object"; Color = $ForegroundColor }) }
+  }
+  AfterEach { $env:NO_COLOR = $script:SavedNoColor }
+
+  It 'shows numbered steps and a summary that marks the failing step' {
+    Start-InstallStep -Name 'Windows version'
+    Start-InstallStep -Name 'Updating winget'
+    Complete-InstallStep -Status 'failed'
+    Write-InstallSummary
+    $texts = $script:Shown.Text
+    $texts | Should -Contain '==> [1/5] Windows version'
+    $texts | Should -Contain '==> [2/5] Updating winget'
+    ($texts -join "`n") | Should -Match 'done     \[1/5\] Windows version'
+    ($texts -join "`n") | Should -Match 'failed   \[2/5\] Updating winget'
+    $texts | Should -Contain '  Stopped after step 2 of 5.'
+    ($script:Shown | Where-Object Text -Like '==>*').Color | Should -Be @('Cyan', 'Cyan')
+  }
+
+  It 'marks a failed first apply as partial, in yellow, not as a failed step' {
+    Start-InstallStep -Name 'BORC setup and borc apply'
+    Complete-InstallStep -Status 'partial'
+    Write-InstallSummary
+    $line = $script:Shown | Where-Object Text -Match 'partial\s+\[1/5\] BORC setup'
+    $line.Color | Should -Be 'Yellow'
+    $script:InstallAst.Extent.Text | Should -Match "\`$BorcFirstApplyFailedExitCode = 'BORC is installed; its first borc apply did not finish'"
+  }
+
+  It 'frames an external command and treats the given codes as fine' {
+    Invoke-InstallCommand -FilePath 'git' -Arguments @('--version') | Should -Be 0
+    $script:Shown[0].Text | Should -Be '  > git --version'
+    $script:Shown[-1].Text | Should -Match '^  < done in \d+s$'
+    $script:Shown[-1].Color | Should -Be 'Green'
+  }
+
+  It 'does not call a command done when its code means the work stopped' {
+    $code = Invoke-InstallCommand -FilePath 'git' -Arguments @('-C', 'Z:\no\such\folder', 'status') -StopCodes @{ 128 = 'stopped for a reason' } 2>$null
+    $code | Should -Be 128
+    $script:Shown[-1].Text | Should -Match '^  < stopped after \d+s: stopped for a reason$'
+    $script:Shown[-1].Color | Should -Be 'Yellow'
+  }
+
+  It 'ends a failing command with its exit code' {
+    Invoke-InstallCommand -FilePath 'git' -Arguments @('-C', 'Z:\no\such\folder', 'status') 2>$null | Should -Not -Be 0
+    $script:Shown[-1].Text | Should -Match '^  < failed, exit code \d+, after \d+s$'
+    $script:Shown[-1].Color | Should -Be 'Red'
+  }
+
+  It 'drops colours with NO_COLOR' {
+    $env:NO_COLOR = '1'
+    Start-InstallStep -Name 'Windows version'
+    $script:Shown.Color | Where-Object { $_ } | Should -BeNullOrEmpty
+  }
+}
+
+Describe 'Engine branch' {
+  BeforeEach { $script:SavedBranch = $env:BORC_BRANCH }
+  AfterEach { $env:BORC_BRANCH = $script:SavedBranch }
+
+  It 'is main unless BORC_BRANCH is set for the process, with a warning when it is' {
+    $env:BORC_BRANCH = $null
+    Get-BorcEngineBranch 3>$null | Should -Be 'main'
+    $env:BORC_BRANCH = 'my-branch'
+    Get-BorcEngineBranch 3>$null | Should -Be 'my-branch'
+    Get-BorcEngineBranch 3>&1 | Where-Object { $_ -is [System.Management.Automation.WarningRecord] } | Should -Match 'BORC_BRANCH is set'
+  }
+}
+
+Describe 'Engine clone' {
+  BeforeAll {
+    $script:Root = New-TestFolder
+    $script:Remote = Join-Path $script:Root 'borc.git'
+    $script:Seed = Join-Path $script:Root 'seed'
+    $script:Engine = Join-Path $script:Root 'localappdata\borc\engine'
+    Invoke-TestGit init --bare $script:Remote
+    Invoke-TestGit clone $script:Remote $script:Seed
+    Set-Content -Path (Join-Path $script:Seed 'version.txt') -Value 'main 1'
+    Invoke-TestGit -C $script:Seed add -A
+    Invoke-TestGit -C $script:Seed commit -m 'main 1'
+    Invoke-TestGit -C $script:Seed push origin HEAD:refs/heads/main
+    Invoke-TestGit -C $script:Seed switch -c my-branch
+    Set-Content -Path (Join-Path $script:Seed 'version.txt') -Value 'branch 1'
+    Invoke-TestGit -C $script:Seed commit -am 'branch 1'
+    Invoke-TestGit -C $script:Seed push origin HEAD:refs/heads/my-branch
+
+    function Install-TestEngine { param([string] $Branch) Install-BorcEngine -Path $script:Engine -Branch $Branch -RepoUrl $script:Remote 6>$null *>$null }
+    function Get-TestEngineVersion { (Get-Content -LiteralPath (Join-Path $script:Engine 'version.txt')) }
+  }
+  AfterAll { Remove-Item -LiteralPath $script:Root -Recurse -Force }
+
+  It 'clones the branch it is given' {
+    Install-TestEngine -Branch 'my-branch'
+    git -C $script:Engine symbolic-ref --short HEAD | Should -Be 'my-branch'
+    Get-TestEngineVersion | Should -Be 'branch 1'
+  }
+
+  It 'pulls new commits of that branch when run again' {
+    Set-Content -Path (Join-Path $script:Seed 'version.txt') -Value 'branch 2'
+    Invoke-TestGit -C $script:Seed commit -am 'branch 2'
+    Invoke-TestGit -C $script:Seed push origin HEAD:refs/heads/my-branch
+    Install-TestEngine -Branch 'my-branch'
+    Get-TestEngineVersion | Should -Be 'branch 2'
+  }
+
+  It 'follows a branch that was rewritten on the remote' {
+    Invoke-TestGit -C $script:Seed reset --hard HEAD~1
+    Set-Content -Path (Join-Path $script:Seed 'version.txt') -Value 'branch rewritten'
+    Invoke-TestGit -C $script:Seed commit -am 'branch rewritten'
+    Invoke-TestGit -C $script:Seed push --force origin HEAD:refs/heads/my-branch
+    Install-TestEngine -Branch 'my-branch'
+    Get-TestEngineVersion | Should -Be 'branch rewritten'
+  }
+
+  It 'goes back to main when run without the branch' {
+    Install-TestEngine -Branch 'main'
+    git -C $script:Engine symbolic-ref --short HEAD | Should -Be 'main'
+    Get-TestEngineVersion | Should -Be 'main 1'
+  }
+
+  It 'stops with a clear error for a branch that does not exist' {
+    { Install-TestEngine -Branch 'no-such-branch' } | Should -Throw '*switch the BORC engine to the branch no-such-branch*'
+  }
+}
+
+Describe 'powershell-yaml for the engine' {
+  It 'saves it into borc''s own modules folder, never with Install-Module' {
+    $root = New-TestFolder
+    try {
+      InModuleScope borc -Parameters @{ R = $root } {
+        param($R)
+        Mock Write-Host {}
+        Mock Get-BorcPaths { [pscustomobject]@{ Modules = Join-Path $R 'modules\PowerShell' } }
+        Mock Get-Module { $null }
+        Mock Save-Module {}
+        Mock Install-Module { throw 'must not install into Documents' }
+        Install-BorcYamlModule
+        Should -Invoke Save-Module -Times 1 -Exactly -ParameterFilter { $Name -eq 'powershell-yaml' -and $Path -eq (Join-Path $R 'modules\PowerShell') }
+      }
+    } finally {
+      Remove-Item -LiteralPath $root -Recurse -Force
+    }
+  }
+
+  It 'says which module it could not install' {
+    InModuleScope borc {
+      Mock Write-Host {}
+      Mock Get-BorcPaths { [pscustomobject]@{ Modules = Join-Path ([IO.Path]::GetTempPath()) ('borc-test-' + [guid]::NewGuid().ToString('N')) } }
+      Mock Get-Module { $null }
+      Mock New-Item {}
+      Mock Save-Module { throw 'blocked' }
+      { Install-BorcYamlModule } | Should -Throw '*Could not install the PowerShell module powershell-yaml: blocked*'
+    }
+  }
+}
+
+Describe 'Setup steps' {
+  It 'accepts only full paths with a drive letter for the folders' {
+    InModuleScope borc {
+      Test-BorcFolderPath -Path 'D:\settings\' | Should -BeTrue
+      Test-BorcFolderPath -Path 'settings\' | Should -BeFalse
+      Test-BorcFolderPath -Path '\\server\share\' | Should -BeFalse
+    }
+  }
+
+  It 'reuses a folder variable that is already set' {
+    InModuleScope borc {
+      Mock Write-Host {}
+      Mock Get-BorcEnvironmentVariable { 'D:\settings' } -ParameterFilter { $Name -eq 'BORC_SETTINGS' -and $Scope -eq 'User' }
+      Mock Read-BorcInput { throw 'must not ask' }
+      Get-BorcFolderSetting -Name 'BORC_SETTINGS' -Purpose 'x' -Example 'D:\settings' | Should -Be 'D:\settings'
+    }
+  }
+
+  It 'asks again until the folder is a full path' {
+    InModuleScope borc {
+      Mock Write-Host {}
+      Mock Get-BorcEnvironmentVariable { $null }
+      $script:Answers = [System.Collections.Generic.Queue[string]]::new([string[]]@('settings', '"D:\settings\"'))
+      Mock Read-BorcInput { $script:Answers.Dequeue() }
+      Get-BorcFolderSetting -Name 'BORC_SETTINGS' -Purpose 'x' -Example 'D:\settings' | Should -Be 'D:\settings'
+    }
+  }
+
+  It 'adds the bin folder to the user PATH once, keeping unexpanded entries' {
+    InModuleScope borc {
+      Mock Write-Host {}
+      $script:UserPath = '%USERPROFILE%\tools;C:\other'
+      Mock Get-BorcUserPath { $script:UserPath }
+      Mock Set-BorcUserPath { $script:UserPath = $Value }
+      $processPath = $env:Path
+      try {
+        Add-BorcUserPath -Folder 'C:\Users\x\AppData\Local\borc\bin'
+        Add-BorcUserPath -Folder 'C:\Users\x\AppData\Local\borc\bin\'
+      } finally {
+        $env:Path = $processPath
+      }
+      $script:UserPath | Should -Be '%USERPROFILE%\tools;C:\other;C:\Users\x\AppData\Local\borc\bin'
+      Should -Invoke Set-BorcUserPath -Times 1 -Exactly
+    }
+  }
+
+  It 'offers the existing branches by number' {
+    InModuleScope borc {
+      Mock Write-Host {}
+      Mock Read-BorcInput { '2' }
+      Select-BorcBaseBranch -Branch 'laptop' -Branches @('home', 'work') | Should -Be 'work'
+      Mock Read-BorcInput { '' }
+      Select-BorcBaseBranch -Branch 'laptop' -Branches @('home', 'work') | Should -BeNullOrEmpty
+    }
+  }
+
+  It 'copies the shim and Get-BorcSecret.ps1 to the runtime folders' {
+    $root = New-TestFolder
+    try {
+      $paths = [pscustomobject]@{ Internal = $root; Bin = Join-Path $root 'bin' }
+      InModuleScope borc -Parameters @{ P = $paths } { param($P) Install-BorcRuntimeFiles -Paths $P }
+      Test-Path (Join-Path $root 'bin\borc.cmd') | Should -BeTrue
+      Test-Path (Join-Path $root 'Get-BorcSecret.ps1') | Should -BeTrue
+    } finally {
+      Remove-Item -LiteralPath $root -Recurse -Force
+    }
+  }
+}

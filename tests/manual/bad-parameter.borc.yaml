@@ -1,0 +1,6 @@
+# Manual check: an unknown parameter (typo) and an undeclared secret.
+apps:
+  - recipe: '@local/borc-check-param'
+    parameters:
+      greting: hello
+  - recipe: '@local/borc-check-secret'
