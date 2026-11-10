@@ -9,6 +9,8 @@ The version number is chosen when the release is cut.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-10
+
 ### Changed
 
 - The install one-liner is now `irm ... | iex`, run in a Windows PowerShell
