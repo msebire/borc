@@ -1,0 +1,16 @@
+# Test fixture: a package whose unit needs admin rights, as WSL's does: it
+# registers machine-wide.
+borc:
+  description: a package that installs machine-wide
+$schema: https://raw.githubusercontent.com/PowerShell/DSC/main/schemas/2023/08/config/document.json
+metadata:
+  winget:
+    processor: dscv3
+resources:
+  - name: wsl package
+    type: Microsoft.WinGet/Package
+    metadata:
+      securityContext: elevated
+    properties:
+      id: Microsoft.WSL
+      source: winget

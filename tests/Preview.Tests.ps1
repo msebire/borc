@@ -361,3 +361,44 @@ Describe 'Upgrade verdicts' {
     }
   }
 }
+
+Describe 'Reading winget configure' {
+  It 'reads the result of each unit from real winget 1.29 output' {
+    $lines = [IO.File]::ReadAllLines((Join-Path $script:FixturesRoot 'winget-configure-apply.txt'))
+    $results = InModuleScope borc -Parameters @{ L = $lines } { param($L) ConvertFrom-BorcConfigureApply -Lines $L }
+    $results['works'] | Should -Be 'applied'
+    $results['fails'] | Should -Be 'failed'
+    $results.Count | Should -Be 2
+  }
+
+  It 'reads an elevated unit, whose type is followed by a shield icon and two spaces' {
+    $lines = @("Microsoft.WinGet/Package$([char]::ConvertFromUtf32(0x1F6E1))  [winget: Microsoft.WSL]", '  Unit successfully applied.')
+    (InModuleScope borc -Parameters @{ L = $lines } { param($L) ConvertFrom-BorcConfigureApply -Lines $L })['winget: Microsoft.WSL'] | Should -Be 'applied'
+  }
+}
+
+Describe 'Packages that need admin rights' {
+  It 'builds an elevated unit that moves a package to its newest version' {
+    $unit = InModuleScope borc { New-WingetPackageUnit -Source winget -Id Microsoft.WSL -Latest -Elevated }
+    $unit['name'] | Should -Be 'winget: Microsoft.WSL'
+    $unit['metadata']['securityContext'] | Should -Be 'elevated'
+    $unit['properties']['useLatest'] | Should -BeTrue
+    $unit['properties']['acceptAgreements'] | Should -BeTrue
+    (InModuleScope borc { New-WingetPackageUnit -Source winget -Id Git.Git }).Contains('metadata') | Should -BeFalse
+  }
+
+  It 'reads the elevated mark of a recipe package, and keeps it when the package is listed twice' {
+    $text = [IO.File]::ReadAllText((Join-Path $script:FixturesRoot 'elevated-package.yaml'))
+    InModuleScope borc -Parameters @{ T = $text } {
+      param($T)
+      $recipe = ConvertTo-BorcRecipe -Text $T -Id '@local/wsl'
+      (Get-BorcRecipePackages -Recipe $recipe).Elevated | Should -BeTrue
+      $config = [pscustomobject]@{ Apps = @([pscustomobject]@{ Kind = 'winget'; Id = 'Microsoft.WSL'; Version = '' }, [pscustomobject]@{ Kind = 'recipe'; Id = '@local/wsl'; Parameters = [ordered]@{} }) }
+      $plan = [pscustomobject]@{ Config = $config; Recipes = [ordered]@{ '@local/wsl' = $recipe }; Order = @('@local/wsl'); Errors = @() }
+      $listed = @(Get-BorcListedPackages -Plan $plan)
+      $listed.Count | Should -Be 1
+      $listed[0].Origin | Should -Be 'borc.yaml'
+      $listed[0].Elevated | Should -BeTrue
+    }
+  }
+}

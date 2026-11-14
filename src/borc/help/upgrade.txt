@@ -8,6 +8,12 @@ never touched, and no other recipe unit runs. An app that is not installed
 yet is skipped; borc apply installs it. A package with a fixed version, in
 borc.yaml or in a recipe, stays at that version.
 
+Packages run as you, except those that need admin rights: a recipe package
+marked securityContext: elevated, or one winget refuses without them. These
+are upgraded in the same winget configure as the upgrade units, so BORC asks
+for one UAC prompt at most. An installer that asks for admin rights itself
+still shows its own prompt.
+
 With <app>, upgrades only that app. The argument is read by its form, as for
 borc install:
 

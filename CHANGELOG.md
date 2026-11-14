@@ -9,6 +9,12 @@ The version number is chosen when the release is cut.
 
 ## [Unreleased]
 
+### Fixed
+
+- `borc upgrade` upgrades a recipe package marked `securityContext: elevated` with
+  admin rights, and retries there a package winget refuses for lack of them, such
+  as WSL. These run with the upgrade units, so BORC asks for one UAC prompt at most.
+
 ## [0.2.0] - 2026-11-14
 
 ### Added

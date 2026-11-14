@@ -84,8 +84,9 @@ on 2026-10-24 with winget 1.29.380, DSC 3.2.2 and Windows 10 22H2:
   an elevated unit in one adds a second prompt, on every `borc apply`, even when
   nothing has to change: winget needs the rights to run its `testScript`.
 - Apps are installed with `Microsoft.WinGet/Package` units (`id` and
-  `source`). `borc upgrade` upgrades these, and `borc uninstall` lists them
-  when the user removes the recipe. Add `version` to install a given version
+  `source`). `borc upgrade` upgrades these, with admin rights when the unit sets
+  `securityContext: elevated`, and `borc uninstall` lists them when the user
+  removes the recipe. Add `version` to install a given version
   instead of the latest; `borc upgrade` then leaves the package alone. BORC sets
   `acceptAgreements: true` on these units, unless the recipe sets it itself: a
   package with agreements fails without it.

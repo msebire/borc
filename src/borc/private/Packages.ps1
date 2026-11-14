@@ -65,20 +65,23 @@ function Get-BorcPackageArguments {
 
 # Every package borc.yaml lists: plain IDs, then the packages of listed recipes.
 # A package listed twice keeps the first entry, but a version fixed by either
-# entry wins, so borc upgrade never moves it past that version.
+# entry wins, so borc upgrade never moves it past that version, and so does a
+# unit that needs admin rights.
 function Get-BorcListedPackages {
   param([Parameter(Mandatory)] $Plan)
   $seen = [ordered]@{}
   $packages = @(
     foreach ($app in $Plan.Config.Apps) {
-      if ($app.Kind -in 'winget', 'msstore') { [pscustomobject]@{ Source = $app.Kind; Id = $app.Id; Version = "$($app.Version)"; Origin = 'borc.yaml' } }
+      if ($app.Kind -in 'winget', 'msstore') { [pscustomobject]@{ Source = $app.Kind; Id = $app.Id; Version = "$($app.Version)"; Origin = 'borc.yaml'; Elevated = $false } }
     }
     foreach ($id in $Plan.Order) { Get-BorcRecipePackages -Recipe $Plan.Recipes[$id] }
   )
   foreach ($package in $packages) {
     $key = "$($package.Source)|$($package.Id)".ToLowerInvariant()
     if (-not $seen.Contains($key)) { $seen[$key] = $package; continue }
+    $elevated = $package.Elevated -or $seen[$key].Elevated
     if ($package.Version -and -not $seen[$key].Version) { $seen[$key] = $package }
+    $seen[$key].Elevated = $elevated
   }
   $seen.Values
 }

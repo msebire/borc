@@ -1,0 +1,23 @@
+Microsoft.DSC.Transitional/PowerShellScript [works]
+  Enable running PowerShell 7 scripts inline
+  Settings:
+    testScript: param($x)
+$false
+    input:
+    setScript: param($x)
+Microsoft.DSC.Transitional/PowerShellScript [fails]
+  Enable running PowerShell 7 scripts inline
+  Settings:
+    testScript: param($x)
+$false
+    input:
+    setScript: param($x)
+throw 'borc check: this unit fails on purpose'
+Microsoft.DSC.Transitional/PowerShellScript [works]
+  Unit successfully applied.
+Microsoft.DSC.Transitional/PowerShellScript [fails]
+  The configuration unit failed while attempting to apply the desired state.
+2026-11-14T15:45:51.218392Z ERROR PID 33812: Script failed with terminating error at line 2 for statement `throw 'borc check: this unit fails on purpose'
+` - System.Management.Automation.RuntimeException: borc check: this unit fails on purpose…
+<See the log file for additional details>
+Some of the configuration was not applied successfully.

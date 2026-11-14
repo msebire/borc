@@ -866,6 +866,104 @@ Describe 'Commands with winget mocked' {
       }
     }
 
+    Context 'with a package that needs admin rights' {
+      BeforeEach {
+        Copy-Item -LiteralPath (Join-Path $script:FixturesRoot 'elevated-package.yaml') -Destination (Join-Path $script:Settings 'borc\cookbook\wslpkg.yaml')
+        $path = Join-Path $script:Settings 'borc\borc.yaml'
+        (Get-Content $path -Raw).Replace('secrets:', "  - recipe: '@local/wslpkg'`nsecrets:") | Set-Content $path -NoNewline
+      }
+
+      It 'upgrades it in the elevated run, with useLatest, and reports the version it moved to' {
+        InModuleScope borc -Parameters @{ P = $script:Paths } {
+          param($P)
+          Mock Get-BorcPaths { $P }
+          $script:Shown = [System.Collections.Generic.List[string]]::new()
+          Mock Write-Host { $script:Shown.Add("$Object") }
+          Mock Invoke-BorcWingetQuiet { [pscustomobject]@{ ExitCode = 1; Output = @() } }
+          Mock Test-BorcRestartPending { $false }
+          $script:Configured = $null
+          Mock Get-BorcInstalledVersion { if ($Id -eq 'Microsoft.WSL') { if ($script:Configured) { '3.0.5' } else { '2.7.14.0' } } else { '1.0' } }
+          $script:Plain = [System.Collections.Generic.List[string]]::new()
+          Mock Invoke-BorcWinget {
+            if ($Arguments[0] -eq 'configure') { $script:Configured = [IO.File]::ReadAllText($Arguments[2]); return 0 }
+            $script:Plain.Add($Arguments[2]); $script:WingetNoApplicableUpgrade
+          }
+          Invoke-Borc -Arguments @('upgrade') | Should -Be 0
+          $script:Plain | Should -Not -Contain 'Microsoft.WSL'
+          $script:Plain | Should -Contain 'Git.Git'
+          $script:Configured | Should -Match "name: 'winget: Microsoft\.WSL'"
+          $script:Configured | Should -Match 'securityContext: elevated'
+          $script:Configured | Should -Match 'useLatest: true'
+          $text = $script:Shown -join "`n"
+          $text | Should -Match 'Packages that need admin rights: Microsoft\.WSL\.'
+          $text | Should -Match '1 unit\(s\) need admin rights: expect one UAC prompt\.'
+          $text | Should -Match '  upgraded:\s+Microsoft\.WSL\s+2\.7\.14\.0\s+-> 3\.0\.5'
+        }
+      }
+
+      It 'leaves it out when it is not installed, as useLatest would install it' {
+        InModuleScope borc -Parameters @{ P = $script:Paths } {
+          param($P)
+          Mock Get-BorcPaths { $P }
+          $script:Shown = [System.Collections.Generic.List[string]]::new()
+          Mock Write-Host { $script:Shown.Add("$Object") }
+          Mock Invoke-BorcWingetQuiet { [pscustomobject]@{ ExitCode = 1; Output = @() } }
+          Mock Get-BorcInstalledVersion { $null }
+          Mock Invoke-BorcWinget { if ($Arguments[0] -eq 'configure') { throw 'nothing to run elevated' }; $script:WingetNoApplicableUpgrade }
+          Invoke-Borc -Arguments @('upgrade', '@local/wslpkg') | Should -Be 0
+          ($script:Shown -join "`n") | Should -Match '  not installed: Microsoft\.WSL'
+        }
+      }
+
+      It 'retries a plain package winget refuses for lack of admin rights in the elevated run' {
+        InModuleScope borc -Parameters @{ P = $script:Paths } {
+          param($P)
+          Mock Get-BorcPaths { $P }
+          $script:Shown = [System.Collections.Generic.List[string]]::new()
+          Mock Write-Host { $script:Shown.Add("$Object") }
+          Mock Invoke-BorcWingetQuiet { [pscustomobject]@{ ExitCode = 1; Output = @() } }
+          Mock Test-BorcRestartPending { $false }
+          Mock Get-BorcInstalledVersion { '1.0' }
+          $script:Configured = $null
+          Mock Invoke-BorcWinget {
+            if ($Arguments[0] -eq 'configure') { $script:Configured = [IO.File]::ReadAllText($Arguments[2]); return 0 }
+            $script:WingetAdminRequired
+          }
+          Invoke-Borc -Arguments @('upgrade', 'Git.Git') | Should -Be 0
+          $script:Configured | Should -Match "name: 'winget: Git\.Git'"
+          $text = $script:Shown -join "`n"
+          $text | Should -Match 'Packages that need admin rights: Git\.Git\.'
+          $text | Should -Not -Match '  failed:'
+        }
+      }
+
+      It 'names only what failed in the elevated run, from winget''s result for each unit' {
+        Copy-Item -LiteralPath (Join-Path $script:FixturesRoot 'tool-upgrade.yaml') -Destination (Join-Path $script:Settings 'borc\cookbook\tool.yaml')
+        $path = Join-Path $script:Settings 'borc\borc.yaml'
+        (Get-Content $path -Raw).Replace('secrets:', "  - recipe: '@local/tool'`nsecrets:") | Set-Content $path -NoNewline
+        InModuleScope borc -Parameters @{ P = $script:Paths } {
+          param($P)
+          Mock Get-BorcPaths { $P }
+          $script:Shown = [System.Collections.Generic.List[string]]::new()
+          Mock Write-Host { $script:Shown.Add("$Object") }
+          Mock Invoke-BorcWingetQuiet { [pscustomobject]@{ ExitCode = 1; Output = @() } }
+          Mock Test-BorcRestartPending { $false }
+          Mock Write-BorcVcRuntimeHint {}
+          Mock Write-BorcWingetVersionHint {}
+          Mock Get-BorcInstalledVersion { '2.7.14.0' }
+          Mock Invoke-BorcWinget {
+            if ($Arguments[0] -ne 'configure') { return $script:WingetNoApplicableUpgrade }
+            foreach ($line in @('Microsoft.WinGet/Package  [winget: Microsoft.WSL]', '  Unit successfully applied.', 'Microsoft.DSC.Transitional/PowerShellScript [@local/tool: tool update]', '  The configuration unit failed while attempting to apply the desired state.')) { $Output.Add($line) }
+            -1978286075
+          }
+          Invoke-Borc -Arguments @('upgrade') | Should -Be 1
+          $text = $script:Shown -join "`n"
+          $text | Should -Match '  failed:\s+upgrade units of @local/tool'
+          $text | Should -Not -Match '  failed:[^\n]*Microsoft\.WSL'
+        }
+      }
+    }
+
     Context 'with a recipe that has upgrade units' {
       BeforeEach {
         Copy-Item -LiteralPath (Join-Path $script:FixturesRoot 'tool-upgrade.yaml') -Destination (Join-Path $script:Settings 'borc\cookbook\tool.yaml')

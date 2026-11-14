@@ -56,6 +56,14 @@ $script:WingetTestInState = 'System is in the described configuration state.'
 $script:WingetTestNotInState = 'System is not in the described configuration state.'
 $script:WingetTestFailed = 'The configuration unit failed while attempting to test the current system state.'
 
+# winget configure itself, seen on 2026-11-14 with winget 1.29.380 (English UI):
+# every unit is listed twice, first with its settings, then with its result on the
+# line below it, one of the two here; a failed unit adds the script's error. The
+# exit code only says that some unit failed (0x8A150005), so BORC reads the last
+# result line of each unit.
+$script:WingetApplyApplied = 'Unit successfully applied.'
+$script:WingetApplyFailed = 'The configuration unit failed while attempting to apply the desired state.'
+
 # winget configure with its extended features off, seen on 2026-11-10 on a new
 # Windows 11 machine: it prints "Extended features are not enabled. Run `winget
 # configure --enable` to enable them." and runs nothing. winget error names this
@@ -79,6 +87,11 @@ $script:WingetNoInstalledMatch = 'No installed package found matching input crit
 # winget show --source msstore gives "Version: Unknown", so winget has nothing to
 # compare and never lists an update for it. BORC asks, and says "unknown" then.
 $script:WingetShowVersionPattern = '^Version:\s*(?<version>\S+)'
+
+# winget upgrade of an MSIX package that installs machine-wide, run without admin
+# rights, seen on 2026-11-14 for Microsoft.WSL: it fails with 0x80073D28,
+# "administrator privileges are required", and no UAC prompt appears.
+$script:WingetAdminRequired = 0x80073D28
 
 # winget exit codes that do not mean a failure for upgrade and uninstall.
 $script:WingetNoApplicableUpgrade = 0x8A15002B
@@ -124,16 +137,20 @@ function Format-WingetPackageName {
   "${Source}: $Id"
 }
 
+# -Latest sets useLatest, verified on 2026-11-14 with winget 1.29.380 (manual check
+# V5): an elevated unit with useLatest: true moved Microsoft.VCRedist.2015+.x86
+# from 14.51 to 14.52, and winget configure test said "not in" before and "in"
+# after. On a package that is not installed it would install it.
 function New-WingetPackageUnit {
-  param([Parameter(Mandatory)] [string] $Source, [Parameter(Mandatory)] [string] $Id, [string] $Version = '')
+  param([Parameter(Mandatory)] [string] $Source, [Parameter(Mandatory)] [string] $Id, [string] $Version = '', [switch] $Latest, [switch] $Elevated)
   $properties = [ordered]@{ id = $Id; source = $Source }
   if ($Version) { $properties['version'] = $Version }
+  if ($Latest) { $properties['useLatest'] = $true }
   $properties['acceptAgreements'] = $true
-  [ordered]@{
-    name = Format-WingetPackageName -Source $Source -Id $Id
-    type = $script:WingetPackageType
-    properties = $properties
-  }
+  $unit = [ordered]@{ name = Format-WingetPackageName -Source $Source -Id $Id; type = $script:WingetPackageType }
+  if ($Elevated) { $unit['metadata'] = [ordered]@{ securityContext = 'elevated' } }
+  $unit['properties'] = $properties
+  $unit
 }
 
 # A package unit from a recipe accepts agreements too, unless the recipe says otherwise.

@@ -16,14 +16,18 @@ function Exit-BorcWingetEncoding {
 }
 
 # The only place BORC runs winget. Output is streamed, indented under a start
-# and an end line, to the host and the log; the function returns winget's exit code.
+# and an end line, to the host and the log, and also added to Output when given;
+# the function returns winget's exit code.
 function Invoke-BorcWinget {
-  param([Parameter(Mandatory)] [string[]] $Arguments, [hashtable] $OkCodes = @{})
+  param([Parameter(Mandatory)] [string[]] $Arguments, [hashtable] $OkCodes = @{}, [System.Collections.Generic.List[string]] $Output)
   $started = Get-Date
   Write-BorcCommandStart -Command "winget $($Arguments -join ' ')"
   $encoding = Enter-BorcWingetEncoding
   try {
-    & winget @Arguments 2>&1 | ForEach-Object { Write-BorcOutputLine -Line "$_" }
+    & winget @Arguments 2>&1 | ForEach-Object {
+      Write-BorcOutputLine -Line "$_"
+      if ($null -ne $Output) { $Output.Add("$_") }
+    }
     $code = $LASTEXITCODE
   } finally {
     Exit-BorcWingetEncoding -Saved $encoding

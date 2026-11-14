@@ -180,6 +180,28 @@ administrator's account, that account's folder gets the reports, and the recipe 
 shown as run, as without a report. The helper prints nothing and never throws, so a
 testScript still outputs one boolean and a report never fails a unit.
 
+### Packages that need admin rights in borc upgrade
+
+`borc upgrade` runs `winget upgrade` as the user, as `apply` installs plain packages
+(see below). An MSIX package that installs machine-wide, such as WSL, then fails
+with 0x80073D28 and no UAC prompt. So the packages that need admin rights go into the
+one elevated `winget configure` that runs the upgrade units: those a recipe marks
+`securityContext: elevated`, which `apply` already honours, and any package winget
+refuses with that code, retried there rather than reported, since a plain `borc.yaml`
+entry cannot be marked. BORC itself then asks for one UAC prompt at most.
+
+They go in as package units with `useLatest: true`. A Windows 11 check (V5) showed
+such an elevated unit moving an installed package to its newest version, with
+`winget configure test` saying "not in" before and "in" after. On a package that is
+not installed, the unit would install it, so only installed packages go in. winget's
+exit code only says that some unit failed, so BORC reads the result line of each unit
+to name what failed.
+
+Installers that ask for admin rights themselves keep their own prompt. Running every
+package elevated would merge them, but it runs everything with admin rights, and when
+UAC asks for another administrator's account, per-user packages would be upgraded in
+that account's profile.
+
 ### A fixed version wins over upgrade
 
 A version written in `borc.yaml` or in a recipe is a decision: the user needs

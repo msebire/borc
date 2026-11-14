@@ -207,13 +207,13 @@ function Invoke-BorcRunsOneByOne {
 }
 
 # Runs one winget configure. Returns 0, winget's failure code, or 3010 when the
-# run left Windows waiting for a restart.
+# run left Windows waiting for a restart. Output gets winget's lines, when given.
 function Invoke-BorcConfigureRun {
-  param([Parameter(Mandatory)] $Document, [Parameter(Mandatory)] [string] $Name, [string] $Command = 'apply')
+  param([Parameter(Mandatory)] $Document, [Parameter(Mandatory)] [string] $Name, [string] $Command = 'apply', [System.Collections.Generic.List[string]] $Output)
   $path = Get-BorcRunFilePath -Suffix "$Name.winget.yaml"
   Write-BorcDocument -Document $Document -Path $path
   $restartBefore = Test-BorcRestartPending
-  $code = Invoke-BorcWinget -Arguments (@('configure', '--file', $path) + $script:WingetConfigureArguments)
+  $code = Invoke-BorcWinget -Arguments (@('configure', '--file', $path) + $script:WingetConfigureArguments) -Output $Output
   if ($code -ne 0) {
     Write-BorcLog -Message "winget configure reported a failure, exit code $(Format-BorcExitCode -Code $code). Its errors are shown above." -Level Error
     if ($code -eq $script:WingetConfigureNotEnabled) {
@@ -234,6 +234,23 @@ function Invoke-BorcConfigureRun {
     return $script:BorcRestartExitCode
   }
   0
+}
+
+# The result of each unit of a winget configure, applied or failed, from the last
+# result line under its name; a unit with none is left out.
+function ConvertFrom-BorcConfigureApply {
+  param([string[]] $Lines = @())
+  $results = @{}
+  $current = $null
+  foreach ($line in $Lines) {
+    if ($line -match $script:WingetTestUnitPattern) { $current = $Matches['name']; continue }
+    if (-not $current) { continue }
+    switch ($line.Trim()) {
+      $script:WingetApplyApplied { $results[$current] = 'applied' }
+      $script:WingetApplyFailed { $results[$current] = 'failed' }
+    }
+  }
+  $results
 }
 
 function Write-BorcConfigureNotEnabledHint {

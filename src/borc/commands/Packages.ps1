@@ -14,23 +14,24 @@ function Invoke-BorcUpgrade {
   if ($upgrade.Recipes.Count -gt 0) { Write-BorcLog -Message "After the packages, the upgrade units of $($upgrade.Recipes -join ', ') will run." }
   elseif ($App -and $target.Packages.Count -eq 0) { Write-BorcLog -Message "$App has nothing borc upgrade can upgrade." }
 
-  $result = Invoke-BorcPackageUpgrades -Packages $target.Packages
-  Start-BorcStep -Name "Running the recipes' upgrade units"
-  $units = Invoke-BorcUpgradeUnits -Paths $Paths -Upgrade $upgrade
-  if ($units.Code -eq $script:BorcRestartExitCode) {
+  $packages = Invoke-BorcPackageUpgrades -Packages $target.Packages
+  Start-BorcStep -Name 'Running the elevated upgrades and the upgrade units'
+  $run = Invoke-BorcElevatedRun -Paths $Paths -Packages $packages.Elevated -Upgrade $upgrade
+  if ($run.Code -eq $script:BorcRestartExitCode) {
     Set-BorcResult -Headline 'Windows needs a restart. Restart, then run borc upgrade again.' -Color Yellow
-    return $units.Code
+    return $run.Code
   }
-  $ran = @(if ($units.Code -eq 0) { $upgrade.Recipes })
-  if ($units.Code -ne 0) { $result.Failed.Add("upgrade units of $($upgrade.Recipes -join ', ')") }
-  Set-BorcUpgradeResult -Upgraded $result.Upgraded -Failed @($result.Failed) -NotInstalled $result.NotInstalled -Fixed $result.Fixed -Ran $ran -Versions $units.Versions
-  if ($result.Failed.Count -gt 0) { return 1 }
+  $after = Get-BorcPackageVersions -Packages $packages.Candidates
+  $failed = @($packages.Failed) + @($run.FailedPackages) + @(if ($run.FailedRecipes.Count -gt 0) { "upgrade units of $($run.FailedRecipes -join ', ')" })
+  Set-BorcUpgradeResult -Upgraded @(Get-BorcVersionChanges -Before $packages.Before -After $after) -Failed $failed -NotInstalled $packages.NotInstalled -Fixed $packages.Fixed -Ran $run.Ran -Versions $run.Versions
+  if ($failed.Count -gt 0) { return 1 }
   0
 }
 
-# The upgrade step for winget packages: a fixed version is left alone, every
-# other package goes through winget upgrade, and winget list before and after
-# says which moved.
+# The upgrade step for winget packages. A fixed version is left alone; the others
+# go through winget upgrade as the user, except those that need admin rights: the
+# ones a recipe marks elevated, and the ones winget refuses for lack of them, which
+# wait for the elevated run. Before holds the versions of every candidate.
 function Invoke-BorcPackageUpgrades {
   param([object[]] $Packages = @())
   $fixed = @($Packages | Where-Object Version)
@@ -38,45 +39,70 @@ function Invoke-BorcPackageUpgrades {
   foreach ($package in $fixed) {
     Write-BorcLog -Message (Format-BorcFixedNotice -Package $package -Installed $fixedVersions[$package.Id])
   }
-  $toUpgrade = @($Packages | Where-Object { -not $_.Version })
-  Start-BorcStep -Name "Upgrading $($toUpgrade.Count) package(s)"
-  $before = Get-BorcPackageVersions -Packages $toUpgrade
-  $okCodes = @{ $script:WingetNoApplicableUpgrade = 'no upgrade available'; $script:WingetNoPackageFound = 'not installed; borc apply installs it' }
+  $candidates = @($Packages | Where-Object { -not $_.Version })
+  $before = Get-BorcPackageVersions -Packages $candidates
   $failed = [System.Collections.Generic.List[string]]::new()
   $notInstalled = [System.Collections.Generic.List[string]]::new()
-  foreach ($package in $toUpgrade) {
+  $elevated = [System.Collections.Generic.List[object]]::new()
+  # useLatest would install a missing package, which is borc apply's job.
+  foreach ($package in @($candidates | Where-Object Elevated)) {
+    if ($before[$package.Id]) { $elevated.Add($package) } else { $notInstalled.Add($package.Id) }
+  }
+  $plain = @($candidates | Where-Object { -not $_.Elevated })
+  Start-BorcStep -Name "Upgrading $($plain.Count) package(s)"
+  $okCodes = @{ $script:WingetNoApplicableUpgrade = 'no upgrade available'; $script:WingetNoPackageFound = 'not installed; borc apply installs it'; $script:WingetAdminRequired = 'needs admin rights; upgraded in the elevated run' }
+  foreach ($package in $plain) {
     $code = Invoke-BorcWinget -Arguments (Get-BorcPackageArguments -Verb 'upgrade' -Source $package.Source -Id $package.Id) -OkCodes $okCodes
     if ($code -eq $script:WingetNoPackageFound) { $notInstalled.Add($package.Id) }
+    elseif ($code -eq $script:WingetAdminRequired) { $elevated.Add($package) }
     elseif (-not $okCodes.ContainsKey($code) -and $code -ne 0) {
       Write-BorcLog -Message "winget could not upgrade $($package.Id), exit code $(Format-BorcExitCode -Code $code)." -Level Error
       $failed.Add($package.Id)
     }
   }
-  $after = Get-BorcPackageVersions -Packages $toUpgrade
   [pscustomobject]@{
-    Upgraded = @(Get-BorcVersionChanges -Before $before -After $after)
-    Failed = $failed
+    Candidates = $candidates
+    Before = $before
+    Elevated = @($elevated)
+    Failed = @($failed)
     NotInstalled = @($notInstalled)
     Fixed = @($fixed | ForEach-Object { Format-BorcFixedDetail -Package $_ -Installed $fixedVersions[$_.Id] })
   }
 }
 
-# Runs the upgrade units of the recipes in one winget configure, so elevated
-# units ask for admin rights once. Code is 0, 1, or 3010 for a restart; Versions
-# is what the units reported with Write-BorcVersion.
-function Invoke-BorcUpgradeUnits {
-  param([Parameter(Mandatory)] $Paths, [Parameter(Mandatory)] $Upgrade)
-  if (-not $Upgrade.Document) {
-    Write-BorcLog -Message 'No recipe to upgrade has upgrade units.'
-    return [pscustomobject]@{ Code = 0; Versions = @() }
+# The one elevated winget configure of borc upgrade: the packages that need admin
+# rights, as units that move to their newest version, then the recipes' upgrade
+# units, so a single UAC prompt covers them all. Code is 0, 1, or 3010 for a
+# restart. A unit failed when winget says so, or when the run failed and winget
+# says nothing of it. Versions is what the units reported with Write-BorcVersion.
+function Invoke-BorcElevatedRun {
+  param([Parameter(Mandatory)] $Paths, [object[]] $Packages = @(), [Parameter(Mandatory)] $Upgrade)
+  $units = @(
+    foreach ($package in $Packages) { New-WingetPackageUnit -Source $package.Source -Id $package.Id -Latest -Elevated }
+    if ($Upgrade.Document) { $Upgrade.Document['resources'] }
+  )
+  if ($units.Count -eq 0) {
+    Write-BorcLog -Message 'No package needs admin rights, and no recipe to upgrade has upgrade units.'
+    return [pscustomobject]@{ Code = 0; FailedPackages = @(); FailedRecipes = @(); Ran = @(); Versions = @() }
   }
-  Write-BorcLog -Message "Upgrade units: $($Upgrade.Document['resources'].Count), from $($Upgrade.Recipes -join ', ')."
-  Write-BorcElevationNotice -Units $Upgrade.Document['resources']
+  if ($Packages.Count -gt 0) { Write-BorcLog -Message "Packages that need admin rights: $(($Packages | ForEach-Object Id) -join ', ')." }
+  if ($Upgrade.Recipes.Count -gt 0) { Write-BorcLog -Message "Upgrade units: $($Upgrade.Document['resources'].Count), from $($Upgrade.Recipes -join ', ')." }
+  Write-BorcElevationNotice -Units $units
   Clear-BorcVersionReports -Paths $Paths
-  $code = Invoke-BorcConfigureRun -Document $Upgrade.Document -Name 'upgrade' -Command 'upgrade'
+  $output = [System.Collections.Generic.List[string]]::new()
+  $code = Invoke-BorcConfigureRun -Document (New-BorcDocument -Units $units) -Name 'upgrade' -Command 'upgrade' -Output $output
+  $results = ConvertFrom-BorcConfigureApply -Lines $output
+  $failedNames = @($units | ForEach-Object { [string]$_['name'] } | Where-Object { $results[$_] -eq 'failed' -or ($code -ne 0 -and $results[$_] -ne 'applied') })
+  $failedRecipes = @($Upgrade.Recipes | Where-Object { $prefix = "$_" + ': '; @($failedNames | Where-Object { $_.StartsWith($prefix) }).Count -gt 0 })
   $versions = @(Get-BorcReportedVersions -Reports (Read-BorcVersionReports -Paths $Paths))
   foreach ($version in $versions) { Write-BorcLog -Message "An upgrade unit reported $($version.Text): $($version.State)." }
-  [pscustomobject]@{ Code = $code; Versions = $versions }
+  [pscustomobject]@{
+    Code = $code
+    FailedPackages = @($Packages | Where-Object { (Format-WingetPackageName -Source $_.Source -Id $_.Id) -in $failedNames } | ForEach-Object Id)
+    FailedRecipes = $failedRecipes
+    Ran = @($Upgrade.Recipes | Where-Object { $_ -notin $failedRecipes })
+    Versions = $versions
+  }
 }
 
 # What borc upgrade covers: with no <app>, every listed package and recipe. With
