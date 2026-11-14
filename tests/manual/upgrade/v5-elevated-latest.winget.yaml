@@ -1,0 +1,18 @@
+# Manual check V5: an elevated Microsoft.WinGet/Package unit with useLatest: true
+# moves an installed older version to the newest one. winget configure test must
+# report it as not in place while an update exists, and as in place afterwards.
+# Change the id to any package that needs admin rights and has an update.
+$schema: https://raw.githubusercontent.com/PowerShell/DSC/main/schemas/2023/08/config/document.json
+metadata:
+  winget:
+    processor: dscv3
+resources:
+  - name: latest package
+    type: Microsoft.WinGet/Package
+    metadata:
+      securityContext: elevated
+    properties:
+      id: Microsoft.VCRedist.2015+.x86
+      source: winget
+      useLatest: true
+      acceptAgreements: true

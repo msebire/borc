@@ -68,14 +68,14 @@ say, because winget units ignore the caller's environment.
 
 Clean up with `Remove-Item $check -Recurse -Force` after closing the window.
 
-## Before upgrade units and versions
+## Checks for borc upgrade
 
-These checks answer what the plan for `borc upgrade <app>`, `--what-if` and upgrade
-units needs from a real winget. The files are in `upgrade/`. Run them from the repo
-root in a new PowerShell 7 window without the variables of the section above. V2 to
-V4 run real `winget configure` files, but their units only write to
-`%LOCALAPPDATA%\borc-check` and open one window. Write each result in
-`docs/design.md` when the feature that needs it is built.
+These checks answer what `borc upgrade <app>`, `--what-if`, upgrade units and
+elevated package upgrades need from a real winget. The files are in `upgrade/`. Run
+them from the repo root in a new PowerShell 7 window without the variables of the
+section above. V2 to V4 run real `winget configure` files, but their units only write
+to `%LOCALAPPDATA%\borc-check` and open one window. V5 really upgrades the package it
+names. Write each result in `docs/design.md` when the feature that needs it is built.
 
 1. **V1: what winget says about upgrades.** Read-only. It saves the output of
    `winget list --upgrade-available` with its variants, and of `winget upgrade`.
@@ -125,6 +125,16 @@ V4 run real `winget configure` files, but their units only write to
    ```powershell
    winget configure test --file tests/manual/upgrade/v4-test-report.winget.yaml --accept-configuration-agreements --disable-interactivity
    Get-ChildItem "$env:LOCALAPPDATA\borc-check\versions" | Get-Content
+   ```
+
+5. **V5: an elevated package unit with `useLatest` upgrades.** Use a package that needs
+   admin rights and has an update (change its id in the file). Three UAC prompts.
+   The first test says "not in", the run moves the version, the second test says "in".
+
+   ```powershell
+   winget configure test --file tests/manual/upgrade/v5-elevated-latest.winget.yaml --accept-configuration-agreements --disable-interactivity
+   winget configure --file tests/manual/upgrade/v5-elevated-latest.winget.yaml --accept-configuration-agreements --disable-interactivity
+   winget configure test --file tests/manual/upgrade/v5-elevated-latest.winget.yaml --accept-configuration-agreements --disable-interactivity
    ```
 
 Clean up with `Remove-Item "$env:LOCALAPPDATA\borc-check" -Recurse -Force`, and close
