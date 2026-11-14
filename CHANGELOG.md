@@ -9,6 +9,8 @@ The version number is chosen when the release is cut.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-14
+
 ### Added
 
 - `borc upgrade <app>` upgrades one app or recipe that `borc.yaml` lists, read by
