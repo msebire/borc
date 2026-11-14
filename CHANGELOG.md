@@ -9,6 +9,8 @@ The version number is chosen when the release is cut.
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-11-14
+
 ### Fixed
 
 - `borc upgrade` upgrades a recipe package marked `securityContext: elevated` with
