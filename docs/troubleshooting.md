@@ -189,6 +189,8 @@ the configuration runs.
 
 BORC only stops when the restart became needed during its own run. A restart
 that was already pending before `borc apply` started does not stop it.
+`borc install` and `borc upgrade` stop the same way, and the message names the
+command to run again.
 
 A unit can also fail because of a restart an earlier unit made necessary, such as a
 package that needs a Windows feature enabled just before. When a failed run leaves

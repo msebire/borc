@@ -622,6 +622,31 @@ Describe 'Commands with winget mocked' {
       }
     }
 
+    It 'names borc install, in the log and the result, when <Case> leaves Windows waiting for a restart' -ForEach @(
+      @{ Case = 'a recipe'; App = 'recipes/idea'; Fixed = $false }
+      @{ Case = 'a move to the fixed version'; App = 'Git.Git'; Fixed = $true }
+    ) {
+      if ($Fixed) {
+        $path = Join-Path $script:Settings 'borc\borc.yaml'
+        (Get-Content $path -Raw).Replace("  - winget: Git.Git`n", "  - winget: Git.Git`n    version: '2.45.1'`n") | Set-Content $path -NoNewline
+      }
+      InModuleScope borc -Parameters @{ P = $script:Paths; App = $App } {
+        param($P, $App)
+        Mock Get-BorcPaths { $P }
+        $script:Shown = [System.Collections.Generic.List[string]]::new()
+        Mock Write-Host { $script:Shown.Add("$Object") }
+        Mock Test-BorcStoredSecret { $true }
+        Mock Invoke-BorcWingetQuiet { [pscustomobject]@{ ExitCode = 0; Output = @('Name  Id       Version  Source', '-----------------------------', 'Git   Git.Git  2.50.0   winget') } }
+        $script:Runs = 0
+        Mock Test-BorcRestartPending { $script:Runs -gt 0 }
+        Mock Invoke-BorcWinget { $script:Runs++; 0 }
+        Invoke-Borc -Arguments @('install', $App) | Should -Be 3010
+        $text = $script:Shown -join "`n"
+        $text | Should -Match ('Windows needs a restart\. Restart, then run borc install ' + [regex]::Escape($App) + ' again\.\n(.|\n)*Result: Windows needs a restart\. Restart, then run borc install ' + [regex]::Escape($App) + ' again\.')
+        $text | Should -Not -Match 'borc apply again'
+      }
+    }
+
     It 'stops when a required recipe fails' {
       InModuleScope borc -Parameters @{ P = $script:Paths } {
         param($P)

@@ -211,7 +211,7 @@ function Install-BorcPlainApp {
 function Set-BorcFixedVersion {
   param([Parameter(Mandatory)] [string] $Kind, [Parameter(Mandatory)] [string] $Id, [Parameter(Mandatory)] [string] $Version)
   $document = New-BorcDocument -Units @(New-WingetPackageUnit -Source $Kind -Id $Id -Version $Version)
-  $code = Invoke-BorcConfigureRun -Document $document -Name ($Id -replace '[^A-Za-z0-9._-]', '_')
+  $code = Invoke-BorcConfigureRun -Document $document -Name ($Id -replace '[^A-Za-z0-9._-]', '_') -Command "install $Id"
   if ($code -eq $script:BorcRestartExitCode) {
     Set-BorcResult -Headline "Windows needs a restart. Restart, then run borc install $Id again." -Color Yellow
     return $code
@@ -259,7 +259,7 @@ function Install-BorcRecipe {
       continue
     }
     if ($single.Name -ne $Id) { Write-BorcLog -Message "Running $($single.Name) first: $Id requires it." }
-    $code = Invoke-BorcConfigureRun -Document $single.Document -Name ($single.Name -replace '[^A-Za-z0-9._-]', '_')
+    $code = Invoke-BorcConfigureRun -Document $single.Document -Name ($single.Name -replace '[^A-Za-z0-9._-]', '_') -Command "install $Id"
     if ($code -eq $script:BorcRestartExitCode) {
       Set-BorcResult -Headline "Windows needs a restart. Restart, then run borc install $Id again." -Color Yellow
       return $code

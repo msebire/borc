@@ -22,6 +22,11 @@ The version number is chosen when the release is cut.
 - Upgrade units can report the versions they find and install with
   `Write-BorcVersion`, so `borc upgrade` shows `4.2.0 -> 4.4.0` for those apps too.
 
+### Fixed
+
+- When a run leaves Windows waiting for a restart, `borc install` says to run
+  `borc install` again, not `borc apply`.
+
 ## [0.1.2] - 2026-11-10
 
 ### Fixed
