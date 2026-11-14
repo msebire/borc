@@ -1,10 +1,21 @@
-Usage: borc upgrade
+Usage: borc upgrade [<app>]
 
 Upgrades, through winget, the apps borc.yaml lists: the plain winget and
 Store IDs, and the winget packages of the listed recipes. Apps borc.yaml does
 not list are never touched, and neither are settings. An app that is not
 installed yet is skipped; borc apply installs it. A package with a fixed
 version, in borc.yaml or in a recipe, stays at that version.
+
+With <app>, upgrades only that app. The argument is read by its form, as for
+borc install:
+
+  repo/recipe or @local/<name>   the winget packages of that recipe, but not
+                                 those of the recipes it requires
+  no dot, such as 9NBLGGH4NNS1   that Microsoft Store ID
+  anything else, such as Git.Git that winget ID
+
+It must be listed in borc.yaml, or be a package of a listed recipe; otherwise
+nothing is upgraded.
 
 winget and Microsoft.DSC are not covered: run the one-line installer again
 to update them.

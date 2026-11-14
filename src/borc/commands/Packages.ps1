@@ -1,13 +1,19 @@
 ﻿# borc upgrade, install and uninstall.
 
 function Invoke-BorcUpgrade {
-  param([Parameter(Mandatory)] $Paths)
+  param([Parameter(Mandatory)] $Paths, [string] $App = '')
   Assert-BorcSettings -Paths $Paths
   Start-BorcSteps -Total 2
   Start-BorcStep -Name 'Checking borc.yaml and the recipes'
   $plan = Get-BorcPlan -SettingsRoot $Paths.Settings -RecipesRoot $Paths.Recipes
   if ($plan.Errors.Count -gt 0) { Write-BorcPlanErrors -Errors $plan.Errors; return 1 }
   $listed = @(Get-BorcListedPackages -Plan $plan)
+  if ($App) {
+    $target = Select-BorcUpgradeTarget -Plan $plan -Packages $listed -App $App
+    if (-not $target.Listed) { return Write-BorcNotListed -App $App }
+    $listed = @($target.Packages)
+    if ($target.Recipe -and $listed.Count -eq 0) { Write-BorcLog -Message "$App has nothing borc upgrade can upgrade." }
+  }
   $fixed = @($listed | Where-Object Version)
   $fixedVersions = Get-BorcPackageVersions -Packages $fixed
   foreach ($package in $fixed) {
@@ -32,6 +38,32 @@ function Invoke-BorcUpgrade {
   Set-BorcUpgradeResult -Upgraded @(Get-BorcVersionChanges -Before $before -After $after) -Failed @($failed) -NotInstalled @($notInstalled) -Fixed $fixedDetails
   if ($failed.Count -gt 0) { return 1 }
   0
+}
+
+# The packages borc upgrade <app> covers, read by the form of <app>: the winget
+# packages of a listed recipe, without the recipes it requires, or the listed
+# package with that ID, from borc.yaml or from a listed recipe. IDs ignore case.
+function Select-BorcUpgradeTarget {
+  param([Parameter(Mandatory)] $Plan, [object[]] $Packages = @(), [Parameter(Mandatory)] [string] $App)
+  if ((Get-BorcAppKind -App $App) -ne 'recipe') {
+    $matched = @($Packages | Where-Object Id -EQ $App)
+    return [pscustomobject]@{ Listed = $matched.Count -gt 0; Recipe = $false; Packages = $matched }
+  }
+  $id = $Plan.Order | Where-Object { $_ -eq $App } | Select-Object -First 1
+  if (-not $id) { return [pscustomobject]@{ Listed = $false; Recipe = $true; Packages = @() } }
+  # The merged entries, so a version fixed anywhere in borc.yaml still wins.
+  $ids = @(Get-BorcRecipePackages -Recipe $Plan.Recipes[$id] | ForEach-Object Id)
+  [pscustomobject]@{ Listed = $true; Recipe = $true; Packages = @($Packages | Where-Object { $_.Id -in $ids }) }
+}
+
+function Write-BorcNotListed {
+  param([Parameter(Mandatory)] [string] $App)
+  $isRecipe = (Get-BorcAppKind -App $App) -eq 'recipe'
+  $where = if ($isRecipe) { 'is not listed in borc.yaml' } else { 'is not listed in borc.yaml, nor installed by a listed recipe' }
+  $term = if ($isRecipe) { ($App -split '/', 2)[1] } else { $App }
+  Write-BorcLog -Message "$App $where. Find the right $(if ($isRecipe) { 'name' } else { 'ID' }) with borc search $term, or add it with borc install $App." -Level Error
+  Set-BorcResult -Headline "nothing was upgraded: $App is not listed in borc.yaml." -Details ([ordered]@{ tip = "borc search $term, or borc install $App" }) -Color Red
+  1
 }
 
 # upgrade leaves a fixed package alone, so what is installed may not be that version.

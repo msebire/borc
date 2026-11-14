@@ -29,7 +29,7 @@ function Get-BorcCompletion {
       Get-BorcRecipeIds | Where-Object { $_ -like "$word*" }
       if ($word.Contains('.')) { Get-BorcWingetCompletion -Word $word }
     }
-    'uninstall' { Get-BorcListedApps | Where-Object { $_ -like "$word*" } }
+    { $_ -in 'upgrade', 'uninstall' } { Get-BorcListedApps | Where-Object { $_ -like "$word*" } }
     'search' { Get-BorcRecipeIds | ForEach-Object { ($_ -split '/', 2)[1] } | Select-Object -Unique | Where-Object { $_ -like "$word*" } }
   }
 }

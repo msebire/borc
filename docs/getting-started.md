@@ -205,7 +205,8 @@ To see what `borc apply` would do without changing anything, run
 merge, leaves the app installed. To remove an app, run `borc uninstall` on each
 machine that has it.
 
-To upgrade the apps `borc.yaml` lists, run `borc upgrade`. To update BORC
+To upgrade the apps `borc.yaml` lists, run `borc upgrade`, or `borc upgrade <app>`
+for one app or recipe. To update BORC
 itself, run `borc self-update`. See [commands](commands.md) for the full list.
 
 `borc upgrade` does not cover winget or Microsoft.DSC, which BORC needs but

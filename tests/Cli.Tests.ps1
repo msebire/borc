@@ -708,6 +708,73 @@ Describe 'Commands with winget mocked' {
       }
     }
 
+    It 'upgrades only <App> when given <App>, without the recipes it requires' -ForEach @(
+      @{ App = 'git.git'; Expected = @('Git.Git') }
+      @{ App = '9NBLGGH4NNS1'; Expected = @('9NBLGGH4NNS1') }
+      @{ App = 'OpenJS.NodeJS.LTS'; Expected = @('OpenJS.NodeJS.LTS') }
+      @{ App = 'recipes/node'; Expected = @('OpenJS.NodeJS.LTS') }
+      @{ App = '@local/WSL-Ubuntu'; Expected = @('Canonical.Ubuntu.2404') }
+    ) {
+      InModuleScope borc -Parameters @{ P = $script:Paths; App = $App } {
+        param($P, $App)
+        Mock Get-BorcPaths { $P }
+        Mock Write-Host {}
+        Mock Invoke-BorcWingetQuiet { [pscustomobject]@{ ExitCode = 1; Output = @() } }
+        $script:Upgraded = [System.Collections.Generic.List[string]]::new()
+        Mock Invoke-BorcWinget { $script:Upgraded.Add($Arguments[2]); $script:WingetNoApplicableUpgrade }
+        Invoke-Borc -Arguments @('upgrade', $App) | Should -Be 0
+        @($script:Upgraded)
+      } | Should -Be $Expected
+    }
+
+    It 'says a listed recipe with no winget package has nothing to upgrade, and runs no winget' {
+      InModuleScope borc -Parameters @{ P = $script:Paths } {
+        param($P)
+        Mock Get-BorcPaths { $P }
+        $script:Shown = [System.Collections.Generic.List[string]]::new()
+        Mock Write-Host { $script:Shown.Add("$Object") }
+        Mock Invoke-BorcWingetQuiet { throw 'must not call winget' }
+        Mock Invoke-BorcWinget { throw 'must not call winget' }
+        Invoke-Borc -Arguments @('upgrade', 'recipes/npm-auth') | Should -Be 0
+        $text = $script:Shown -join "`n"
+        $text | Should -Match 'recipes/npm-auth has nothing borc upgrade can upgrade\.'
+        $text | Should -Match 'Result: done; nothing to upgrade\.'
+      }
+    }
+
+    It 'refuses <App>, which borc.yaml does not list, before calling winget' -ForEach @(
+      @{ App = 'Git.Gti'; Expected = 'Git\.Gti is not listed in borc\.yaml, nor installed by a listed recipe\. Find the right ID with borc search Git\.Gti, or add it with borc install Git\.Gti\.' }
+      @{ App = 'recipes/nod'; Expected = 'recipes/nod is not listed in borc\.yaml\. Find the right name with borc search nod, or add it with borc install recipes/nod\.' }
+    ) {
+      InModuleScope borc -Parameters @{ P = $script:Paths; App = $App; Expected = $Expected } {
+        param($P, $App, $Expected)
+        Mock Get-BorcPaths { $P }
+        $script:Shown = [System.Collections.Generic.List[string]]::new()
+        Mock Write-Host { $script:Shown.Add("$Object") }
+        Mock Invoke-BorcWingetQuiet { throw 'must not call winget' }
+        Mock Invoke-BorcWinget { throw 'must not call winget' }
+        Invoke-Borc -Arguments @('upgrade', $App) | Should -Be 1
+        $text = $script:Shown -join "`n"
+        $text | Should -Match $Expected
+        $text | Should -Match ('Result: nothing was upgraded: ' + [regex]::Escape($App) + ' is not listed in borc\.yaml\.')
+      }
+    }
+
+    It 'leaves <App> alone when its version is fixed, as without an argument' -ForEach @(@{ App = 'Git.Git' }) {
+      $path = Join-Path $script:Settings 'borc\borc.yaml'
+      (Get-Content $path -Raw).Replace("  - winget: Git.Git`n", "  - winget: Git.Git`n    version: '2.45.1'`n") | Set-Content $path -NoNewline
+      InModuleScope borc -Parameters @{ P = $script:Paths; App = $App } {
+        param($P, $App)
+        Mock Get-BorcPaths { $P }
+        $script:Shown = [System.Collections.Generic.List[string]]::new()
+        Mock Write-Host { $script:Shown.Add("$Object") }
+        Mock Invoke-BorcWingetQuiet { [pscustomobject]@{ ExitCode = 1; Output = @() } }
+        Mock Invoke-BorcWinget { throw 'must not upgrade a fixed version' }
+        Invoke-Borc -Arguments @('upgrade', $App) | Should -Be 0
+        ($script:Shown -join "`n") | Should -Match 'Result: done; nothing to upgrade\.\n  fixed version:\s+Git\.Git at 2\.45\.1'
+      }
+    }
+
     It 'ends upgrade with what changed version and what failed' {
       InModuleScope borc -Parameters @{ P = $script:Paths } {
         param($P)

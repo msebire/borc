@@ -9,6 +9,11 @@ The version number is chosen when the release is cut.
 
 ## [Unreleased]
 
+### Added
+
+- `borc upgrade <app>` upgrades one app or recipe that `borc.yaml` lists, read by
+  its form as `borc install` reads it, and Tab completes it.
+
 ## [0.1.2] - 2026-11-10
 
 ### Fixed

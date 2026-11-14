@@ -92,7 +92,7 @@ Log: C:\Users\you\AppData\Local\borc\logs\20261024-101500-123-apply.log
 | `installed <id>.`, `<id> was already installed.`, `<id> is now at <version>.`, `ran <recipe>.` | `install` worked. `borc.yaml` says whether a line was added |
 | `uninstalled <id>.`, `<id> was not installed.`, `removed <recipe> from borc.yaml.` | `uninstall` worked. `borc.yaml` says whether a line was removed |
 | `<id> was not installed; ...`, `<id> was not moved to <version>; ...`, `<id> was not uninstalled; ...` | winget reported a failure |
-| `nothing was installed: ...`, `nothing changed: ...` | BORC stopped before running anything |
+| `nothing was upgraded: ...`, `nothing was installed: ...`, `nothing changed: ...` | BORC stopped before running anything |
 
 `borc search` and `borc self-update` have no `Result:`: their last lines already
 give the answer.
@@ -113,7 +113,7 @@ In PowerShell 7, press Tab after `borc` to complete:
 | `borc help ` | the commands |
 | `borc apply --` | `--what-if`, `--no-pull`, `--one-by-one`, `--help`, and `--check` once `--what-if` is there |
 | `borc install ` | your `@local` recipes and the recipes of the cloned recipe repos; winget IDs once the text has a dot, such as `Git.` |
-| `borc uninstall ` | the apps and recipes `borc.yaml` lists |
+| `borc upgrade `, `borc uninstall ` | the apps and recipes `borc.yaml` lists |
 | `borc search ` | recipe names |
 
 `@local` recipes are completed with quotes (`'@local/fonts'`), because `@`
@@ -283,13 +283,24 @@ runs, and no `setScript` does. Every recipe then gets a definite verdict:
 
 <!-- help: upgrade -->
 ```text
-Usage: borc upgrade
+Usage: borc upgrade [<app>]
 
 Upgrades, through winget, the apps borc.yaml lists: the plain winget and
 Store IDs, and the winget packages of the listed recipes. Apps borc.yaml does
 not list are never touched, and neither are settings. An app that is not
 installed yet is skipped; borc apply installs it. A package with a fixed
 version, in borc.yaml or in a recipe, stays at that version.
+
+With <app>, upgrades only that app. The argument is read by its form, as for
+borc install:
+
+  repo/recipe or @local/<name>   the winget packages of that recipe, but not
+                                 those of the recipes it requires
+  no dot, such as 9NBLGGH4NNS1   that Microsoft Store ID
+  anything else, such as Git.Git that winget ID
+
+It must be listed in borc.yaml, or be a package of a listed recipe; otherwise
+nothing is upgraded.
 
 winget and Microsoft.DSC are not covered: run the one-line installer again
 to update them.
