@@ -261,14 +261,26 @@ function Invoke-BorcRecipeCheck {
   $runs = New-BorcRunDocuments -Plan $Plan
   $plainNames = @($Plan.Config.Apps | Where-Object Kind -NE 'recipe' | ForEach-Object { Format-WingetPackageName -Source $_.Kind -Id $_.Id })
   $units = @(@($runs.Reboot, $runs.Main) | Where-Object { $_ } | ForEach-Object { $_['resources'] } | Where-Object { $_['name'] -notin $plainNames })
-  $results = [ordered]@{}
-  if ($units.Count -eq 0) { Write-BorcLog -Message 'No recipe unit to test.'; return $results }
-  $elevated = @($units | Where-Object { (Test-BorcMap $_['metadata']) -and $_['metadata']['securityContext'] -eq 'elevated' }).Count
-  Write-BorcLog -Message "Testing $($units.Count) unit(s). Their testScripts run; no setScript does."
-  if ($elevated -gt 0) { Write-BorcLog -Message "$elevated unit(s) need admin rights: expect one UAC prompt." -Level Warning }
+  if ($units.Count -eq 0) { Write-BorcLog -Message 'No recipe unit to test.'; return [ordered]@{} }
+  Invoke-BorcUnitTest -Units $units -Name 'check'
+}
 
-  $path = Get-BorcRunFilePath -Suffix 'check.winget.yaml'
-  Write-BorcDocument -Document (New-BorcDocument -Units $units) -Path $path
+# Says how many units need admin rights, so the UAC prompt is expected.
+function Write-BorcElevationNotice {
+  param([object[]] $Units = @())
+  $elevated = @($Units | Where-Object { (Test-BorcMap $_['metadata']) -and $_['metadata']['securityContext'] -eq 'elevated' }).Count
+  if ($elevated -gt 0) { Write-BorcLog -Message "$elevated unit(s) need admin rights: expect one UAC prompt." -Level Warning }
+}
+
+# Runs the testScripts of the units in one winget configure test, so elevated
+# units ask for admin rights once. Returns unit name -> state.
+function Invoke-BorcUnitTest {
+  param([Parameter(Mandatory)] [object[]] $Units, [Parameter(Mandatory)] [string] $Name)
+  $results = [ordered]@{}
+  Write-BorcLog -Message "Testing $($Units.Count) unit(s). Their testScripts run; no setScript does."
+  Write-BorcElevationNotice -Units $Units
+  $path = Get-BorcRunFilePath -Suffix "$Name.winget.yaml"
+  Write-BorcDocument -Document (New-BorcDocument -Units $Units) -Path $path
   $arguments = @('configure', 'test', '--file', $path) + $script:WingetTestArguments
   $started = Get-Date
   Write-BorcCommandStart -Command "winget $($arguments -join ' ')"

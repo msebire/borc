@@ -148,6 +148,27 @@ installed Store app, and says `unknown` when the version is missing. Output BORC
 cannot read, such as winget in another language, fails the check rather than
 reporting no update.
 
+### Upgrades outside winget are units
+
+A recipe can install an app another way than winget, such as a .NET global tool,
+which `borc upgrade` could not move. The upgrade is a unit of the recipe, named under
+`upgrade` in the BORC header, rather than a script BORC runs itself. It goes through
+`winget configure` like every unit, so the verified WinGet rules, `input` and dropped
+units, `Get-BorcSecret` and a single UAC prompt for elevated units all apply, and
+BORC keeps one way to run recipe code. Its testScript says whether the app is up to
+date, so winget skips the setScript when there is nothing new, and
+`upgrade --what-if --check` can tell an update from none.
+
+`apply` and `install` leave these units out, as `apply` leaves packages at their
+version: moving an app forward is `borc upgrade`'s job. No other unit may wait for
+one, since it would never run with them, and a package cannot be one, since
+`borc upgrade` already upgrades packages.
+
+A Windows 11 check showed that an app a setScript starts keeps running after winget
+ends, with its window, in the user's session. `Start-Process -WindowStyle Hidden`
+hid the app's own window, because Windows applies it to the first window shown, so
+the docs say not to use it there.
+
 ### A fixed version wins over upgrade
 
 A version written in `borc.yaml` or in a recipe is a decision: the user needs

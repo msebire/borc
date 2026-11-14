@@ -209,7 +209,7 @@ function Invoke-BorcRunsOneByOne {
 # Runs one winget configure. Returns 0, winget's failure code, or 3010 when the
 # run left Windows waiting for a restart.
 function Invoke-BorcConfigureRun {
-  param([Parameter(Mandatory)] $Document, [Parameter(Mandatory)] [string] $Name)
+  param([Parameter(Mandatory)] $Document, [Parameter(Mandatory)] [string] $Name, [string] $Command = 'apply')
   $path = Get-BorcRunFilePath -Suffix "$Name.winget.yaml"
   Write-BorcDocument -Document $Document -Path $path
   $restartBefore = Test-BorcRestartPending
@@ -223,14 +223,14 @@ function Invoke-BorcConfigureRun {
     # A unit may have needed what an earlier unit only finishes after a restart,
     # such as a package that needs a Windows feature it just enabled.
     if (-not $restartBefore -and (Test-BorcRestartPending)) {
-      Write-BorcLog -Message 'Windows needs a restart, which may be why units failed. Restart, then run borc apply again.' -Level Warning
+      Write-BorcLog -Message "Windows needs a restart, which may be why units failed. Restart, then run borc $Command again." -Level Warning
     }
     Write-BorcVcRuntimeHint
     Write-BorcWingetVersionHint
     return 1
   }
   if (-not $restartBefore -and (Test-BorcRestartPending)) {
-    Write-BorcLog -Message 'Windows needs a restart. Restart, then run borc apply again.' -Level Warning
+    Write-BorcLog -Message "Windows needs a restart. Restart, then run borc $Command again." -Level Warning
     return $script:BorcRestartExitCode
   }
   0

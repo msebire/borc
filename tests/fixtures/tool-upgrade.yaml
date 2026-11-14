@@ -1,0 +1,43 @@
+# Test fixture: a tool installed outside winget, with an upgrade unit that
+# waits for its install unit and an elevated one with a parameter.
+borc:
+  description: a tool installed outside winget
+  parameters:
+    channel: release channel (optional)
+  upgrade: [tool update, tool channel]
+$schema: https://raw.githubusercontent.com/PowerShell/DSC/main/schemas/2023/08/config/document.json
+metadata:
+  winget:
+    processor: dscv3
+resources:
+  - name: tool install
+    type: Microsoft.DSC.Transitional/PowerShellScript
+    properties:
+      input: tool
+      testScript: |
+        param($name)
+        $true
+      setScript: |
+        param($name)
+  - name: tool update
+    type: Microsoft.DSC.Transitional/PowerShellScript
+    dependsOn:
+      - tool install
+    properties:
+      input: tool
+      testScript: |
+        param($name)
+        $false
+      setScript: |
+        param($name)
+  - name: tool channel
+    type: Microsoft.DSC.Transitional/PowerShellScript
+    metadata:
+      securityContext: elevated
+    properties:
+      input: '{{channel}}'
+      testScript: |
+        param($channel)
+        $false
+      setScript: |
+        param($channel)

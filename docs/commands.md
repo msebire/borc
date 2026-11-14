@@ -86,8 +86,9 @@ Log: C:\Users\you\AppData\Local\borc\logs\20261024-101500-123-apply.log
 
 | Result | When |
 | --- | --- |
-| `borc upgrade would upgrade N packages.` | winget lists an update for N packages `borc upgrade` would move, listed under `updates` |
-| `probably nothing to upgrade; N could not be checked.` | no update is listed, but winget cannot tell for the packages under `unknown` |
+| `borc upgrade would upgrade N packages and M recipes.` | winget lists an update for N packages, or `--check` found M recipes whose upgrade units would run, listed under `updates` |
+| `probably nothing to upgrade; N could not be checked.` | no update is known, but winget cannot tell for what is under `unknown` |
+| `probably nothing to upgrade; N recipes have upgrade units. Run with --check to know.` | only recipes with upgrade units remain, which only `--check` tests |
 | `nothing to upgrade.` | every package is up to date, fixed or not installed |
 | `nothing was checked: ...` | `borc.yaml` or a recipe has a problem, the app is not listed, or winget's list could not be read |
 
@@ -96,7 +97,9 @@ Log: C:\Users\you\AppData\Local\borc\logs\20261024-101500-123-apply.log
 | Result | When |
 | --- | --- |
 | `done, with changes.` | `upgrade` moved at least one package to another version, listed under `upgraded` |
+| `done; no package moved, and the upgrade units ran.` | `upgrade` ran the recipes' upgrade units, listed under `ran`; winget does not say what they changed |
 | `done; nothing to upgrade.` | `upgrade` found nothing to move. `not installed` and `fixed version` list what it left alone |
+| `Windows needs a restart. ...` | an upgrade unit left Windows waiting for a restart |
 | `some upgrades failed; ...` | winget could not upgrade the packages listed under `failed` |
 | `installed <id>.`, `<id> was already installed.`, `<id> is now at <version>.`, `ran <recipe>.` | `install` worked. `borc.yaml` says whether a line was added |
 | `uninstalled <id>.`, `<id> was not installed.`, `removed <recipe> from borc.yaml.` | `uninstall` worked. `borc.yaml` says whether a line was removed |
@@ -121,7 +124,7 @@ In PowerShell 7, press Tab after `borc` to complete:
 | `borc ` | the commands |
 | `borc help ` | the commands |
 | `borc apply --` | `--what-if`, `--no-pull`, `--one-by-one`, `--help`, and `--check` once `--what-if` is there |
-| `borc upgrade --` | `--what-if`, `--help` |
+| `borc upgrade --` | `--what-if`, `--help`, and `--check` once `--what-if` is there |
 | `borc install ` | your `@local` recipes and the recipes of the cloned recipe repos; winget IDs once the text has a dot, such as `Git.` |
 | `borc upgrade `, `borc uninstall ` | the apps and recipes `borc.yaml` lists |
 | `borc search ` | recipe names |
@@ -293,19 +296,22 @@ runs, and no `setScript` does. Every recipe then gets a definite verdict:
 
 <!-- help: upgrade -->
 ```text
-Usage: borc upgrade [--what-if] [<app>]
+Usage: borc upgrade [--what-if [--check]] [<app>]
 
 Upgrades, through winget, the apps borc.yaml lists: the plain winget and
-Store IDs, and the winget packages of the listed recipes. Apps borc.yaml does
-not list are never touched, and neither are settings. An app that is not
-installed yet is skipped; borc apply installs it. A package with a fixed
-version, in borc.yaml or in a recipe, stays at that version.
+Store IDs, and the winget packages of the listed recipes. Then runs the
+upgrade units of the listed recipes, which update what a recipe installs
+outside winget, in one winget configure. Apps borc.yaml does not list are
+never touched, and no other recipe unit runs. An app that is not installed
+yet is skipped; borc apply installs it. A package with a fixed version, in
+borc.yaml or in a recipe, stays at that version.
 
 With <app>, upgrades only that app. The argument is read by its form, as for
 borc install:
 
-  repo/recipe or @local/<name>   the winget packages of that recipe, but not
-                                 those of the recipes it requires
+  repo/recipe or @local/<name>   the winget packages and upgrade units of that
+                                 recipe, but not those of the recipes it
+                                 requires
   no dot, such as 9NBLGGH4NNS1   that Microsoft Store ID
   anything else, such as Git.Git that winget ID
 
@@ -321,11 +327,16 @@ Options:
               recipe code. Each package is update available, up to date,
               fixed version, not installed, or unknown when winget cannot
               tell, such as for a Store app the Store gives no version for.
+              A recipe with upgrade units is not checked.
+  --check     With --what-if only: also run the testScript of each upgrade
+              unit (winget configure test), so such a recipe is update
+              available or up to date. Elevated units ask for one UAC prompt.
   -h, --help  Show this page.
 
 Exit codes:
   0     Done; with --what-if, whatever was found.
   1     A check failed or winget reported a failure.
+  3010  Windows needs a restart; restart and run borc upgrade again.
 ```
 
 ### What `upgrade --what-if` checks
@@ -349,7 +360,12 @@ packages `borc upgrade` would cover: the same list, or only `<app>`.
 - **A fixed version** shows the newer one, but `borc upgrade` leaves it alone.
 - **`unknown`** means winget cannot tell: the installed version is unknown, or
   the Store gives no version for the app, which BORC asks with `winget show`.
-- **Recipes' settings** are not checked: only their winget packages are.
+- **A recipe with upgrade units** is `not checked`: only its units' `testScript`
+  can tell, and `--what-if` runs no recipe code. Add `--check` to run those tests
+  in one `winget configure test`: the recipe is then `update available` (a unit
+  would run), `up to date`, or `unknown` when a test fails. Elevated units ask for
+  one UAC prompt.
+- **Other recipe units** are never checked, nor run by `borc upgrade`.
 
 ## borc install
 

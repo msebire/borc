@@ -49,19 +49,32 @@ function Get-BorcPackageUnits {
   }
 }
 
+# The upgrade units of the given recipes, in plan order, in one document that only
+# borc upgrade runs. Recipes names the recipes with at least one unit in it.
+function New-BorcUpgradeDocument {
+  param([Parameter(Mandatory)] $Plan, [string[]] $Ids = $Plan.Order)
+  $dropped = [System.Collections.Generic.List[string]]::new()
+  $units = @(Get-BorcRunUnits -Plan $Plan -Ids @($Plan.Order | Where-Object { $_ -in $Ids }) -Units Upgrade -Dropped $dropped)
+  [pscustomobject]@{
+    Document = New-BorcDocument -Units $units
+    Recipes = @($units | ForEach-Object { ([string]$_['name'] -split ': ', 2)[0] } | Select-Object -Unique)
+    Dropped = @($dropped)
+  }
+}
+
 # Units of the given recipes, in order. Each recipe's units depend on the kept
 # units of the recipes it requires, when those are part of the same run.
 function Get-BorcRunUnits {
-  param([Parameter(Mandatory)] $Plan, [string[]] $Ids, [Parameter(Mandatory)] [AllowEmptyCollection()] $Dropped)
+  param([Parameter(Mandatory)] $Plan, [string[]] $Ids, [ValidateSet('Install', 'Upgrade')] [string] $Units = 'Install', [Parameter(Mandatory)] [AllowEmptyCollection()] $Dropped)
   $kept = @{}
   foreach ($id in $Ids) {
     $recipe = $Plan.Recipes[$id]
     $app = $Plan.Config.Apps | Where-Object { $_.Kind -eq 'recipe' -and $_.Id -eq $id } | Select-Object -First 1
     $parameters = if ($app) { $app.Parameters } else { [ordered]@{} }
     $requiredUnits = @(foreach ($required in $recipe.Requires) { if ($kept.ContainsKey($required)) { $kept[$required] } })
-    $units = @(ConvertTo-BorcRecipeUnits -Recipe $recipe -Parameters $parameters -RequiredUnits $requiredUnits -Dropped $Dropped)
-    $kept[$id] = @($units | ForEach-Object { [pscustomobject]@{ Type = $_['type']; Name = $_['name'] } })
-    $units
+    $recipeUnits = @(ConvertTo-BorcRecipeUnits -Recipe $recipe -Parameters $parameters -RequiredUnits $requiredUnits -Units $Units -Dropped $Dropped)
+    $kept[$id] = @($recipeUnits | ForEach-Object { [pscustomobject]@{ Type = $_['type']; Name = $_['name'] } })
+    $recipeUnits
   }
 }
 
@@ -70,10 +83,14 @@ function ConvertTo-BorcRecipeUnits {
     [Parameter(Mandatory)] $Recipe,
     [Parameter(Mandatory)] [System.Collections.IDictionary] $Parameters,
     [object[]] $RequiredUnits = @(),
+    [ValidateSet('Install', 'Upgrade')] [string] $Units = 'Install',
     [Parameter(Mandatory)] [AllowEmptyCollection()] $Dropped
   )
   $droppedNames = @{}
   foreach ($resource in $Recipe.Resources) {
+    # Upgrade units are left out of every other run, and the other units out of
+    # borc upgrade, as dropped units are: their dependsOn entries go too.
+    if (($resource['name'] -in $Recipe.Upgrade) -ne ($Units -eq 'Upgrade')) { $droppedNames[$resource['name']] = $true; continue }
     $missing = @(Get-BorcMissingParameters -Resource $resource -Parameters $Parameters)
     if ($missing.Count -gt 0) {
       $droppedNames[$resource['name']] = $true

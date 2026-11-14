@@ -64,7 +64,7 @@ Describe 'Template README' {
 Describe 'Example recipe' {
   It 'documents every option a recipe can use' {
     $text = Read-TestText -Path $script:RecipePath
-    foreach ($word in 'Layout under BORC_SETTINGS', 'requires:', 'reboot:', 'parameters:', '{{name}}', 'secrets:', 'Microsoft.WinGet/Package', 'testScript', 'setScript', 'securityContext: elevated', 'docs/writing-recipes.md') {
+    foreach ($word in 'Layout under BORC_SETTINGS', 'requires:', 'reboot:', 'parameters:', '{{name}}', 'secrets:', 'upgrade:', 'Microsoft.WinGet/Package', 'testScript', 'setScript', 'securityContext: elevated', 'docs/writing-recipes.md') {
       $text | Should -Match ([regex]::Escape($word)) -Because "the example recipe should explain $word"
     }
   }

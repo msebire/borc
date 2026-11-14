@@ -1,0 +1,56 @@
+# CodeAlta, a .NET global tool, with the .NET 10 SDK it needs. winget does not
+# manage the tool, so an upgrade unit updates it.
+#
+# Layout under BORC_SETTINGS: none.
+borc:
+  description: CodeAlta desktop, with the .NET 10 SDK it needs
+  upgrade: [codealta update]
+$schema: https://raw.githubusercontent.com/PowerShell/DSC/main/schemas/2023/08/config/document.json
+metadata:
+  winget:
+    processor: dscv3
+resources:
+  - name: dotnet sdk
+    type: Microsoft.WinGet/Package
+    properties:
+      id: Microsoft.DotNet.SDK.10
+      source: winget
+  - name: codealta
+    type: Microsoft.DSC.Transitional/PowerShellScript
+    dependsOn:
+      - dotnet sdk
+    properties:
+      input: CodeAlta
+      testScript: |
+        param($package)
+        $dotnet = Join-Path $env:ProgramFiles 'dotnet\dotnet.exe'
+        [bool]((& $dotnet tool list --global | Out-String) -match "(?im)^$package\s")
+      setScript: |
+        param($package)
+        $dotnet = Join-Path $env:ProgramFiles 'dotnet\dotnet.exe'
+        & $dotnet tool install --global $package
+        if ($LASTEXITCODE -ne 0) { throw "dotnet tool install failed, exit code $LASTEXITCODE" }
+  # Only borc upgrade runs this unit: the header lists it under upgrade.
+  - name: codealta update
+    type: Microsoft.DSC.Transitional/PowerShellScript
+    properties:
+      input: CodeAlta
+      testScript: |
+        param($package)
+        # In place when the latest version is installed, or when the tool is not
+        # installed at all: installing it is borc apply's job.
+        $dotnet = Join-Path $env:ProgramFiles 'dotnet\dotnet.exe'
+        $list = & $dotnet tool list --global | Out-String
+        if ($list -notmatch "(?im)^$package\s+(\S+)") { return $true }
+        $installed = $Matches[1]
+        $index = Invoke-RestMethod "https://api.nuget.org/v3-flatcontainer/$($package.ToLowerInvariant())/index.json"
+        $installed -eq @($index.versions | Where-Object { $_ -notmatch '-' })[-1]
+      setScript: |
+        param($package)
+        # The app holds the files the update replaces.
+        if (Get-Process alta -ErrorAction SilentlyContinue) { throw 'Close CodeAlta, then run borc upgrade again.' }
+        $dotnet = Join-Path $env:ProgramFiles 'dotnet\dotnet.exe'
+        & $dotnet tool update --global $package
+        if ($LASTEXITCODE -ne 0) { throw "dotnet tool update failed, exit code $LASTEXITCODE" }
+        # Started once, the app rewrites its Start menu shortcut.
+        Start-Process (Join-Path $env:USERPROFILE '.dotnet\tools\alta.cmd')

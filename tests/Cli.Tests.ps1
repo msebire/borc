@@ -55,6 +55,11 @@ Describe 'Help' {
     }
   }
 
+  It 'refuses --check without --what-if, for upgrade too' {
+    Mock Write-Host {}
+    InModuleScope borc { Invoke-Borc -Arguments @('upgrade', '--check') } | Should -Be 2
+  }
+
   It 'refuses --check without --what-if' {
     $result = Invoke-TestBorc -Arguments @('apply', '--check')
     $result.Code | Should -Be 2
@@ -831,6 +836,106 @@ Describe 'Commands with winget mocked' {
         Mock Invoke-BorcWinget { throw 'must not upgrade with --what-if' }
         Invoke-Borc -Arguments @('upgrade', '--what-if') | Should -Be 1
         ($script:Shown -join "`n") | Should -Match "Result: nothing was checked: BORC could not read winget's list of updates"
+      }
+    }
+
+    Context 'with a recipe that has upgrade units' {
+      BeforeEach {
+        Copy-Item -LiteralPath (Join-Path $script:FixturesRoot 'tool-upgrade.yaml') -Destination (Join-Path $script:Settings 'borc\cookbook\tool.yaml')
+        $path = Join-Path $script:Settings 'borc\borc.yaml'
+        (Get-Content $path -Raw).Replace('secrets:', "  - recipe: '@local/tool'`n    parameters:`n      channel: beta`nsecrets:") | Set-Content $path -NoNewline
+      }
+
+      It 'runs them after the packages, in one winget configure, and says they ran' {
+        InModuleScope borc -Parameters @{ P = $script:Paths } {
+          param($P)
+          Mock Get-BorcPaths { $P }
+          $script:Shown = [System.Collections.Generic.List[string]]::new()
+          Mock Write-Host { $script:Shown.Add("$Object") }
+          Mock Invoke-BorcWingetQuiet { [pscustomobject]@{ ExitCode = 1; Output = @() } }
+          Mock Test-BorcRestartPending { $false }
+          $script:Calls = [System.Collections.Generic.List[string]]::new()
+          $script:Configured = $null
+          Mock Invoke-BorcWinget {
+            $script:Calls.Add($Arguments[0])
+            if ($Arguments[0] -eq 'configure') { $script:Configured = [IO.File]::ReadAllText($Arguments[2]); return 0 }
+            $script:WingetNoApplicableUpgrade
+          }
+          Invoke-Borc -Arguments @('upgrade') | Should -Be 0
+          $script:Calls[-1] | Should -Be 'configure'
+          @($script:Calls | Where-Object { $_ -eq 'configure' }).Count | Should -Be 1
+          $script:Configured | Should -Match '@local/tool: tool update'
+          $script:Configured | Should -Match '@local/tool: tool channel'
+          $script:Configured | Should -Not -Match 'tool install'
+          $text = $script:Shown -join "`n"
+          $text | Should -Match 'After the packages, the upgrade units of @local/tool will run\.'
+          $text | Should -Match '1 unit\(s\) need admin rights: expect one UAC prompt\.'
+          $text | Should -Match 'Result: done; no package moved, and the upgrade units ran\.\n  ran:\s+upgrade units of @local/tool; winget does not say what they changed'
+        }
+      }
+
+      It 'runs only the units of the recipe given, and none for a package' {
+        InModuleScope borc -Parameters @{ P = $script:Paths } {
+          param($P)
+          Mock Get-BorcPaths { $P }
+          Mock Write-Host {}
+          Mock Invoke-BorcWingetQuiet { [pscustomobject]@{ ExitCode = 1; Output = @() } }
+          Mock Test-BorcRestartPending { $false }
+          $script:Calls = [System.Collections.Generic.List[string]]::new()
+          Mock Invoke-BorcWinget { $script:Calls.Add("$($Arguments[0]) $($Arguments[2])"); if ($Arguments[0] -eq 'configure') { 0 } else { $script:WingetNoApplicableUpgrade } }
+          Invoke-Borc -Arguments @('upgrade', '@local/tool') | Should -Be 0
+          @($script:Calls | ForEach-Object { ($_ -split ' ')[0] }) | Should -Be @('configure')
+          $script:Calls.Clear()
+          Invoke-Borc -Arguments @('upgrade', 'Git.Git') | Should -Be 0
+          $script:Calls | Should -Be @('upgrade Git.Git')
+        }
+      }
+
+      It 'reports failed upgrade units, and a restart they need' {
+        InModuleScope borc -Parameters @{ P = $script:Paths } {
+          param($P)
+          Mock Get-BorcPaths { $P }
+          $script:Shown = [System.Collections.Generic.List[string]]::new()
+          Mock Write-Host { $script:Shown.Add("$Object") }
+          Mock Invoke-BorcWingetQuiet { [pscustomobject]@{ ExitCode = 1; Output = @() } }
+          Mock Test-BorcRestartPending { $false }
+          Mock Write-BorcVcRuntimeHint {}
+          Mock Write-BorcWingetVersionHint {}
+          Mock Invoke-BorcWinget { if ($Arguments[0] -eq 'configure') { 1 } else { $script:WingetNoApplicableUpgrade } }
+          Invoke-Borc -Arguments @('upgrade', '@local/tool') | Should -Be 1
+          ($script:Shown -join "`n") | Should -Match '  failed:\s+upgrade units of @local/tool'
+          $script:Shown.Clear()
+          $script:Runs = 0
+          Mock Test-BorcRestartPending { $script:Runs -gt 0 }
+          Mock Invoke-BorcWinget { if ($Arguments[0] -eq 'configure') { $script:Runs++ }; 0 }
+          Invoke-Borc -Arguments @('upgrade', '@local/tool') | Should -Be 3010
+          ($script:Shown -join "`n") | Should -Match 'Result: Windows needs a restart\. Restart, then run borc upgrade again\.'
+        }
+      }
+
+      It 'shows them as not checked with --what-if, and tests them with --check' {
+        InModuleScope borc -Parameters @{ P = $script:Paths } {
+          param($P)
+          Mock Get-BorcPaths { $P }
+          $script:Shown = [System.Collections.Generic.List[string]]::new()
+          Mock Write-Host { $script:Shown.Add("$Object") }
+          Mock Invoke-BorcWingetQuiet { [pscustomobject]@{ ExitCode = 1; Output = @() } }
+          Mock Invoke-BorcWingetQuiet { [pscustomobject]@{ ExitCode = 0; Output = @('No installed package found matching input criteria.') } } -ParameterFilter { $Arguments -contains '--upgrade-available' }
+          Mock Invoke-BorcWinget { throw 'must not change anything' }
+          Invoke-Borc -Arguments @('upgrade', '--what-if', '@local/tool') | Should -Be 0
+          $text = $script:Shown -join "`n"
+          $text | Should -Match 'not checked\s+@local/tool\s+upgrade units: tool update, tool channel; --check tests them'
+          $text | Should -Match 'Result: probably nothing to upgrade; 1 recipe has upgrade units\. Run with --check to know\.'
+
+          $script:Shown.Clear()
+          $test = @('Microsoft.DSC.Transitional/PowerShellScript [@local/tool: tool update]', '  System is in the described configuration state.', 'Microsoft.DSC.Transitional/PowerShellScript  [@local/tool: tool channel]', '  System is not in the described configuration state.')
+          Mock Invoke-BorcWingetQuiet { [pscustomobject]@{ ExitCode = 1; Output = $test } } -ParameterFilter { $Arguments[0] -eq 'configure' -and $Arguments[1] -eq 'test' }
+          Invoke-Borc -Arguments @('upgrade', '--what-if', '--check', '@local/tool') | Should -Be 0
+          $text = $script:Shown -join "`n"
+          $text | Should -Match 'update available\s+@local/tool\s+would run: tool channel'
+          $text | Should -Match 'Result: borc upgrade would upgrade 1 recipe\.'
+          Should -Invoke Invoke-BorcWingetQuiet -Times 1 -Exactly -ParameterFilter { $Arguments[0] -eq 'configure' -and $Arguments[1] -eq 'test' }
+        }
       }
     }
 

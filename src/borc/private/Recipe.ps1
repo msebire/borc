@@ -1,7 +1,7 @@
 ﻿# Reads one recipe: the BORC header, the WinGet header check and the resources.
 
 $script:BorcPlaceholderPattern = '\{\{([A-Za-z_][A-Za-z0-9_]*)\}\}'
-$script:BorcHeaderKeys = @('description', 'requires', 'reboot', 'parameters', 'secrets')
+$script:BorcHeaderKeys = @('description', 'requires', 'reboot', 'parameters', 'secrets', 'upgrade')
 
 function Resolve-BorcRecipePath {
   param(
@@ -29,6 +29,7 @@ function ConvertTo-BorcRecipe {
     Reboot = $false
     Parameters = [ordered]@{}
     Secrets = @()
+    Upgrade = @()
     Resources = @()
     Errors = $errors
   }
@@ -50,6 +51,7 @@ function ConvertTo-BorcRecipe {
   }
   Read-BorcRecipeHeader -Node $document['borc'] -Recipe $recipe
   Read-BorcRecipeResources -Node $document['resources'] -Recipe $recipe
+  Test-BorcUpgradeUnits -Recipe $recipe
   $recipe
 }
 
@@ -67,6 +69,7 @@ function Read-BorcRecipeHeader {
   }
   $Recipe.Requires = @(Read-BorcNameList -Node $Node['requires'] -What 'requires' -Pattern $script:BorcRecipeIdPattern -Recipe $Recipe)
   $Recipe.Secrets = @(Read-BorcNameList -Node $Node['secrets'] -What 'secrets' -Pattern $script:BorcSymbolPattern -Recipe $Recipe)
+  $Recipe.Upgrade = @(Read-BorcNameList -Node $Node['upgrade'] -What 'upgrade' -Pattern '\S' -Recipe $Recipe)
   if ($null -ne $Node['parameters']) {
     if (Test-BorcMap $Node['parameters']) {
       foreach ($name in $Node['parameters'].Keys) {
@@ -108,6 +111,27 @@ function Read-BorcRecipeResources {
   }
   $Recipe.Resources = @($resources)
   foreach ($resource in $Recipe.Resources) { Test-BorcResourceDependsOn -Resource $resource -Names $names -Recipe $Recipe }
+}
+
+# Upgrade units only run in borc upgrade, so each must be a resource of the recipe,
+# not a package (borc upgrade upgrades those already), and no other unit may wait
+# for one.
+function Test-BorcUpgradeUnits {
+  param([Parameter(Mandatory)] $Recipe)
+  $id = $Recipe.Id
+  $types = @{}
+  foreach ($resource in $Recipe.Resources) { $types[$resource['name']] = $resource['type'] }
+  foreach ($name in $Recipe.Upgrade) {
+    if (-not $types.ContainsKey($name)) { $Recipe.Errors.Add("recipe ${id}: '$name' in upgrade is not a resource of this recipe.") }
+    elseif ($types[$name] -eq $script:WingetPackageType) { $Recipe.Errors.Add("recipe ${id}: '$name' in upgrade is a package unit; borc upgrade already upgrades packages.") }
+  }
+  foreach ($resource in $Recipe.Resources) {
+    if ($resource['name'] -in $Recipe.Upgrade -or -not (Test-BorcList $resource['dependsOn'])) { continue }
+    foreach ($entry in $resource['dependsOn']) {
+      $target = ConvertFrom-WingetDependsOn -Value "$entry"
+      if ($target -in $Recipe.Upgrade) { $Recipe.Errors.Add("recipe ${id}: resource '$($resource['name'])' depends on '$target', an upgrade unit; only borc upgrade runs it.") }
+    }
+  }
 }
 
 # dependsOn may only name units of the same recipe; other recipes are waited

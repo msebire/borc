@@ -3,30 +3,48 @@
 function Invoke-BorcUpgrade {
   param([Parameter(Mandatory)] $Paths, [string] $App = '')
   Assert-BorcSettings -Paths $Paths
-  Start-BorcSteps -Total 2
+  Start-BorcSteps -Total 3
   Start-BorcStep -Name 'Checking borc.yaml and the recipes'
   $plan = Get-BorcPlan -SettingsRoot $Paths.Settings -RecipesRoot $Paths.Recipes
   if ($plan.Errors.Count -gt 0) { Write-BorcPlanErrors -Errors $plan.Errors; return 1 }
-  $listed = @(Get-BorcListedPackages -Plan $plan)
-  if ($App) {
-    $target = Select-BorcUpgradeTarget -Plan $plan -Packages $listed -App $App
-    if (-not $target.Listed) { return Write-BorcNotListed -App $App }
-    $listed = @($target.Packages)
-    if ($target.Recipe -and $listed.Count -eq 0) { Write-BorcLog -Message "$App has nothing borc upgrade can upgrade." }
+  $target = Select-BorcUpgradeTarget -Plan $plan -Packages @(Get-BorcListedPackages -Plan $plan) -App $App
+  if (-not $target.Listed) { return Write-BorcNotListed -App $App }
+  $upgrade = New-BorcUpgradeDocument -Plan $plan -Ids $target.Recipes
+  foreach ($message in $upgrade.Dropped) { Write-BorcLog -Message $message }
+  if ($upgrade.Recipes.Count -gt 0) { Write-BorcLog -Message "After the packages, the upgrade units of $($upgrade.Recipes -join ', ') will run." }
+  elseif ($App -and $target.Packages.Count -eq 0) { Write-BorcLog -Message "$App has nothing borc upgrade can upgrade." }
+
+  $result = Invoke-BorcPackageUpgrades -Packages $target.Packages
+  Start-BorcStep -Name "Running the recipes' upgrade units"
+  $code = Invoke-BorcUpgradeUnits -Upgrade $upgrade
+  if ($code -eq $script:BorcRestartExitCode) {
+    Set-BorcResult -Headline 'Windows needs a restart. Restart, then run borc upgrade again.' -Color Yellow
+    return $code
   }
-  $fixed = @($listed | Where-Object Version)
+  $ran = @(if ($code -eq 0) { $upgrade.Recipes })
+  if ($code -ne 0) { $result.Failed.Add("upgrade units of $($upgrade.Recipes -join ', ')") }
+  Set-BorcUpgradeResult -Upgraded $result.Upgraded -Failed @($result.Failed) -NotInstalled $result.NotInstalled -Fixed $result.Fixed -Ran $ran
+  if ($result.Failed.Count -gt 0) { return 1 }
+  0
+}
+
+# The upgrade step for winget packages: a fixed version is left alone, every
+# other package goes through winget upgrade, and winget list before and after
+# says which moved.
+function Invoke-BorcPackageUpgrades {
+  param([object[]] $Packages = @())
+  $fixed = @($Packages | Where-Object Version)
   $fixedVersions = Get-BorcPackageVersions -Packages $fixed
   foreach ($package in $fixed) {
     Write-BorcLog -Message (Format-BorcFixedNotice -Package $package -Installed $fixedVersions[$package.Id])
   }
-  $fixedDetails = @($fixed | ForEach-Object { Format-BorcFixedDetail -Package $_ -Installed $fixedVersions[$_.Id] })
-  $packages = @($listed | Where-Object { -not $_.Version })
-  Start-BorcStep -Name "Upgrading $($packages.Count) package(s)"
-  $before = Get-BorcPackageVersions -Packages $packages
+  $toUpgrade = @($Packages | Where-Object { -not $_.Version })
+  Start-BorcStep -Name "Upgrading $($toUpgrade.Count) package(s)"
+  $before = Get-BorcPackageVersions -Packages $toUpgrade
   $okCodes = @{ $script:WingetNoApplicableUpgrade = 'no upgrade available'; $script:WingetNoPackageFound = 'not installed; borc apply installs it' }
   $failed = [System.Collections.Generic.List[string]]::new()
   $notInstalled = [System.Collections.Generic.List[string]]::new()
-  foreach ($package in $packages) {
+  foreach ($package in $toUpgrade) {
     $code = Invoke-BorcWinget -Arguments (Get-BorcPackageArguments -Verb 'upgrade' -Source $package.Source -Id $package.Id) -OkCodes $okCodes
     if ($code -eq $script:WingetNoPackageFound) { $notInstalled.Add($package.Id) }
     elseif (-not $okCodes.ContainsKey($code) -and $code -ne 0) {
@@ -34,26 +52,41 @@ function Invoke-BorcUpgrade {
       $failed.Add($package.Id)
     }
   }
-  $after = Get-BorcPackageVersions -Packages $packages
-  Set-BorcUpgradeResult -Upgraded @(Get-BorcVersionChanges -Before $before -After $after) -Failed @($failed) -NotInstalled @($notInstalled) -Fixed $fixedDetails
-  if ($failed.Count -gt 0) { return 1 }
-  0
+  $after = Get-BorcPackageVersions -Packages $toUpgrade
+  [pscustomobject]@{
+    Upgraded = @(Get-BorcVersionChanges -Before $before -After $after)
+    Failed = $failed
+    NotInstalled = @($notInstalled)
+    Fixed = @($fixed | ForEach-Object { Format-BorcFixedDetail -Package $_ -Installed $fixedVersions[$_.Id] })
+  }
 }
 
-# The packages borc upgrade <app> covers, read by the form of <app>: the winget
-# packages of a listed recipe, without the recipes it requires, or the listed
-# package with that ID, from borc.yaml or from a listed recipe. IDs ignore case.
+# Runs the upgrade units of the recipes in one winget configure, so elevated
+# units ask for admin rights once. Returns 0, 1, or 3010 for a restart.
+function Invoke-BorcUpgradeUnits {
+  param([Parameter(Mandatory)] $Upgrade)
+  if (-not $Upgrade.Document) { Write-BorcLog -Message 'No recipe to upgrade has upgrade units.'; return 0 }
+  Write-BorcLog -Message "Upgrade units: $($Upgrade.Document['resources'].Count), from $($Upgrade.Recipes -join ', ')."
+  Write-BorcElevationNotice -Units $Upgrade.Document['resources']
+  Invoke-BorcConfigureRun -Document $Upgrade.Document -Name 'upgrade' -Command 'upgrade'
+}
+
+# What borc upgrade covers: with no <app>, every listed package and recipe. With
+# <app>, read by its form: a listed recipe, with its winget packages but not the
+# recipes it requires, or the listed package with that ID, from borc.yaml or from
+# a listed recipe. IDs ignore case.
 function Select-BorcUpgradeTarget {
-  param([Parameter(Mandatory)] $Plan, [object[]] $Packages = @(), [Parameter(Mandatory)] [string] $App)
+  param([Parameter(Mandatory)] $Plan, [object[]] $Packages = @(), [string] $App = '')
+  if (-not $App) { return [pscustomobject]@{ Listed = $true; Recipe = $false; Packages = $Packages; Recipes = @($Plan.Order) } }
   if ((Get-BorcAppKind -App $App) -ne 'recipe') {
     $matched = @($Packages | Where-Object Id -EQ $App)
-    return [pscustomobject]@{ Listed = $matched.Count -gt 0; Recipe = $false; Packages = $matched }
+    return [pscustomobject]@{ Listed = $matched.Count -gt 0; Recipe = $false; Packages = $matched; Recipes = @() }
   }
   $id = $Plan.Order | Where-Object { $_ -eq $App } | Select-Object -First 1
-  if (-not $id) { return [pscustomobject]@{ Listed = $false; Recipe = $true; Packages = @() } }
+  if (-not $id) { return [pscustomobject]@{ Listed = $false; Recipe = $true; Packages = @(); Recipes = @() } }
   # The merged entries, so a version fixed anywhere in borc.yaml still wins.
   $ids = @(Get-BorcRecipePackages -Recipe $Plan.Recipes[$id] | ForEach-Object Id)
-  [pscustomobject]@{ Listed = $true; Recipe = $true; Packages = @($Packages | Where-Object { $_.Id -in $ids }) }
+  [pscustomobject]@{ Listed = $true; Recipe = $true; Packages = @($Packages | Where-Object { $_.Id -in $ids }); Recipes = @($id) }
 }
 
 function Write-BorcNotListed {
@@ -83,14 +116,16 @@ function Format-BorcFixedDetail {
 }
 
 function Set-BorcUpgradeResult {
-  param([string[]] $Upgraded = @(), [string[]] $Failed = @(), [string[]] $NotInstalled = @(), [string[]] $Fixed = @())
+  param([string[]] $Upgraded = @(), [string[]] $Failed = @(), [string[]] $NotInstalled = @(), [string[]] $Fixed = @(), [string[]] $Ran = @())
   $details = [ordered]@{}
   if ($Upgraded.Count -gt 0) { $details['upgraded'] = $Upgraded -join ', ' }
+  if ($Ran.Count -gt 0) { $details['ran'] = "upgrade units of $($Ran -join ', '); winget does not say what they changed" }
   if ($Failed.Count -gt 0) { $details['failed'] = $Failed -join ', ' }
   if ($NotInstalled.Count -gt 0) { $details['not installed'] = "$($NotInstalled -join ', '); borc apply installs them" }
   if ($Fixed.Count -gt 0) { $details['fixed version'] = $Fixed -join ', ' }
   if ($Failed.Count -gt 0) { Set-BorcResult -Headline "some upgrades failed; winget's errors are shown above." -Details $details -Color Red }
   elseif ($Upgraded.Count -gt 0) { Set-BorcResult -Headline 'done, with changes.' -Details $details -Color Green }
+  elseif ($Ran.Count -gt 0) { Set-BorcResult -Headline 'done; no package moved, and the upgrade units ran.' -Details $details -Color Green }
   else { Set-BorcResult -Headline 'done; nothing to upgrade.' -Details $details -Color Green }
 }
 

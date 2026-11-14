@@ -47,6 +47,19 @@ Describe 'Documentation examples' {
     $runs.Main.resources.name | Should -Contain 'recipes/node: npm cache'
   }
 
+  It 'has an upgrade unit example that BORC accepts, and only borc upgrade runs' {
+    $text = Read-TestText -Path (Join-Path $script:ExamplesRoot 'recipes\recipes\codealta.yaml')
+    InModuleScope borc -Parameters @{ T = $text } {
+      param($T)
+      $recipe = ConvertTo-BorcRecipe -Text $T -Id 'recipes/codealta'
+      $recipe.Errors | Should -BeNullOrEmpty
+      $config = [pscustomobject]@{ Apps = @([pscustomobject]@{ Kind = 'recipe'; Id = 'recipes/codealta'; Parameters = [ordered]@{} }) }
+      $plan = [pscustomobject]@{ Config = $config; Recipes = [ordered]@{ 'recipes/codealta' = $recipe }; Order = @('recipes/codealta'); Errors = @() }
+      (New-BorcRunDocuments -Plan $plan).Main.resources.name | Should -Not -Contain 'recipes/codealta: codealta update'
+      (New-BorcUpgradeDocument -Plan $plan).Document.resources.name | Should -Be @('recipes/codealta: codealta update')
+    }
+  }
+
   It 'has borc.yaml snippets that BORC accepts' {
     foreach ($file in Get-ChildItem -Path $script:ExamplesRoot -Filter '*.borc.yaml') {
       $config = InModuleScope borc -Parameters @{ T = (Read-TestText -Path $file.FullName) } { param($T) ConvertTo-BorcConfig -Text $T }

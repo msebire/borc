@@ -1,20 +1,20 @@
 ﻿# borc upgrade --what-if: which listed packages have an update, from what winget
-# lists, without running any recipe code. Changes nothing.
+# lists, and which recipes have upgrade units. Runs no recipe code unless --check
+# tests those units. Changes nothing.
 
 function Invoke-BorcUpgradePreview {
-  param([Parameter(Mandatory)] $Paths, [string] $App = '')
+  param([Parameter(Mandatory)] $Paths, [string] $App = '', [switch] $Check)
   Assert-BorcSettings -Paths $Paths
-  Start-BorcSteps -Total 3
+  Start-BorcSteps -Total $(if ($Check) { 4 } else { 3 })
   Start-BorcStep -Name 'Checking borc.yaml and the recipes'
   $plan = Get-BorcPlan -SettingsRoot $Paths.Settings -RecipesRoot $Paths.Recipes
   if ($plan.Errors.Count -gt 0) { Write-BorcPlanErrors -Errors $plan.Errors; return 1 }
-  $packages = @(Get-BorcListedPackages -Plan $plan)
-  if ($App) {
-    $target = Select-BorcUpgradeTarget -Plan $plan -Packages $packages -App $App
-    if (-not $target.Listed) { return Write-BorcNotListed -App $App -Headline 'nothing was checked' }
-    $packages = @($target.Packages)
-    if ($target.Recipe -and $packages.Count -eq 0) { Write-BorcLog -Message "$App has nothing borc upgrade can upgrade." }
-  }
+  $target = Select-BorcUpgradeTarget -Plan $plan -Packages @(Get-BorcListedPackages -Plan $plan) -App $App
+  if (-not $target.Listed) { return Write-BorcNotListed -App $App -Headline 'nothing was checked' }
+  $packages = @($target.Packages)
+  $upgrade = New-BorcUpgradeDocument -Plan $plan -Ids $target.Recipes
+  foreach ($message in $upgrade.Dropped) { Write-BorcLog -Message $message }
+  if ($App -and $packages.Count -eq 0 -and $upgrade.Recipes.Count -eq 0) { Write-BorcLog -Message "$App has nothing borc upgrade can upgrade." }
 
   Start-BorcStep -Name 'Asking winget which packages have an update'
   $updates = if ($packages.Count -gt 0) { Get-BorcAvailableUpdates } else { [ordered]@{} }
@@ -22,10 +22,19 @@ function Invoke-BorcUpgradePreview {
     Set-BorcResult -Headline "nothing was checked: BORC could not read winget's list of updates, shown in the log." -Color Red
     return 1
   }
+  $checks = $null
+  if ($Check) {
+    Start-BorcStep -Name "Testing the recipes' upgrade units (winget configure test)"
+    if ($upgrade.Document) { $checks = Invoke-BorcUnitTest -Units @($upgrade.Document['resources']) -Name 'upgrade-check' }
+    else { Write-BorcLog -Message 'No recipe to check has upgrade units.'; $checks = [ordered]@{} }
+  }
 
   Start-BorcStep -Name 'What borc upgrade would upgrade'
   Update-BorcInstalledList
-  $rows = @(foreach ($package in $packages) { Get-BorcUpgradeVerdict -Package $package -Updates $updates })
+  $rows = @(
+    foreach ($package in $packages) { Get-BorcUpgradeVerdict -Package $package -Updates $updates }
+    foreach ($id in $upgrade.Recipes) { Get-BorcUpgradeUnitsVerdict -Id $id -Units @($upgrade.Document['resources']) -Checks $checks }
+  )
   Clear-BorcInstalledList
   Show-BorcUpgradeRows -Rows $rows
   Write-BorcLog -Message 'Nothing was changed (--what-if).'
@@ -75,7 +84,25 @@ function Get-BorcUpgradeVerdict {
   elseif ($installed -eq 'unknown') { 'unknown', 'winget does not know the installed version' }
   elseif ($Package.Source -eq 'msstore' -and -not (Test-BorcStoreVersionKnown -Id $Package.Id)) { 'unknown', "$installed installed; the Store gives no version, so winget cannot tell" }
   else { 'up to date', $installed }
-  [pscustomobject]@{ State = $state; Id = $Package.Id; Detail = $detail }
+  [pscustomobject]@{ Kind = 'package'; State = $state; Id = $Package.Id; Detail = $detail }
+}
+
+# A recipe's row from its upgrade units: without --check they are not checked;
+# with it, a unit not in place means an update is available.
+function Get-BorcUpgradeUnitsVerdict {
+  param([Parameter(Mandatory)] [string] $Id, [object[]] $Units = @(), [System.Collections.IDictionary] $Checks)
+  $prefix = "${Id}: "
+  $names = @($Units | ForEach-Object { [string]$_['name'] } | Where-Object { $_.StartsWith($prefix) })
+  $short = { param($Name) $Name.Substring($prefix.Length) }
+  $state, $detail = if ($null -eq $Checks) { 'not checked', "upgrade units: $(($names | ForEach-Object { & $short $_ }) -join ', '); --check tests them" }
+  else {
+    $out = @($names | Where-Object { $Checks[$_].State -eq 'out' } | ForEach-Object { & $short $_ })
+    $unknown = @($names | Where-Object { $Checks[$_].State -notin 'in', 'out' } | ForEach-Object { "$(& $short $_) ($(if ($Checks[$_]) { $Checks[$_].Message } else { 'no result from winget' }))" })
+    if ($out.Count -gt 0) { 'update available', "would run: $($out -join ', ')" }
+    elseif ($unknown.Count -gt 0) { 'unknown', "could not test: $($unknown -join '; ')" }
+    else { 'up to date', "upgrade units: $($names.Count) of $($names.Count) in place" }
+  }
+  [pscustomobject]@{ Kind = 'recipe'; State = $state; Id = $Id; Detail = $detail }
 }
 
 # Whether the Store gives a version for an app, without which winget never lists
@@ -107,22 +134,38 @@ function Format-BorcUpgradeCounts {
   $count = @{}
   foreach ($row in $Rows) { $count[$row.State] = [int]$count[$row.State] + 1 }
   $updates = [int]$count['update available']
-  "$updates $(if ($updates -eq 1) { 'update' } else { 'updates' }) available, $([int]$count['up to date']) up to date, $([int]$count['fixed version']) fixed, $([int]$count['not installed']) not installed, $([int]$count['unknown']) unknown"
+  $text = "$updates $(if ($updates -eq 1) { 'update' } else { 'updates' }) available, $([int]$count['up to date']) up to date, $([int]$count['fixed version']) fixed, $([int]$count['not installed']) not installed, $([int]$count['unknown']) unknown"
+  if ($count['not checked']) { $text += ", $($count['not checked']) not checked" }
+  $text
 }
 
 # The answer to "would borc upgrade change anything?".
 function Set-BorcUpgradePreviewResult {
   param([object[]] $Rows = @())
   $details = [ordered]@{}
-  $groups = [ordered]@{ 'updates' = 'update available'; 'fixed version' = 'fixed version'; 'not installed' = 'not installed'; 'unknown' = 'unknown' }
+  $groups = [ordered]@{ 'updates' = 'update available'; 'fixed version' = 'fixed version'; 'not installed' = 'not installed'; 'unknown' = 'unknown'; 'not checked' = 'not checked' }
   foreach ($label in $groups.Keys) {
     $matched = @($Rows | Where-Object State -EQ $groups[$label])
     if ($matched.Count -gt 0) { $details[$label] = ($matched | ForEach-Object { "$($_.Id) ($($_.Detail))" }) -join ', ' }
   }
   $details['counts'] = Format-BorcUpgradeCounts -Rows $Rows
-  $updates = @($Rows | Where-Object State -EQ 'update available').Count
+  $updates = @($Rows | Where-Object State -EQ 'update available')
   $unknown = @($Rows | Where-Object State -EQ 'unknown').Count
-  if ($updates -gt 0) { Set-BorcResult -Headline "borc upgrade would upgrade $updates $(if ($updates -eq 1) { 'package' } else { 'packages' })." -Details $details -Color Yellow }
+  $notChecked = @($Rows | Where-Object State -EQ 'not checked').Count
+  if ($updates.Count -gt 0) { Set-BorcResult -Headline "borc upgrade would upgrade $(Format-BorcUpgradeTargets -Rows $updates)." -Details $details -Color Yellow }
   elseif ($unknown -gt 0) { Set-BorcResult -Headline "probably nothing to upgrade; $unknown could not be checked." -Details $details }
+  elseif ($notChecked -gt 0) { Set-BorcResult -Headline "probably nothing to upgrade; $notChecked $(if ($notChecked -eq 1) { 'recipe has' } else { 'recipes have' }) upgrade units. Run with --check to know." -Details $details }
   else { Set-BorcResult -Headline 'nothing to upgrade.' -Details $details -Color Green }
+}
+
+# "2 packages", "1 recipe", or "2 packages and 1 recipe".
+function Format-BorcUpgradeTargets {
+  param([Parameter(Mandatory)] [object[]] $Rows)
+  $packages = @($Rows | Where-Object Kind -NE 'recipe').Count
+  $recipes = @($Rows | Where-Object Kind -EQ 'recipe').Count
+  $parts = @(
+    if ($packages -gt 0) { "$packages $(if ($packages -eq 1) { 'package' } else { 'packages' })" }
+    if ($recipes -gt 0) { "$recipes $(if ($recipes -eq 1) { 'recipe' } else { 'recipes' })" }
+  )
+  $parts -join ' and '
 }

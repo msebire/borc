@@ -1,16 +1,19 @@
-Usage: borc upgrade [--what-if] [<app>]
+Usage: borc upgrade [--what-if [--check]] [<app>]
 
 Upgrades, through winget, the apps borc.yaml lists: the plain winget and
-Store IDs, and the winget packages of the listed recipes. Apps borc.yaml does
-not list are never touched, and neither are settings. An app that is not
-installed yet is skipped; borc apply installs it. A package with a fixed
-version, in borc.yaml or in a recipe, stays at that version.
+Store IDs, and the winget packages of the listed recipes. Then runs the
+upgrade units of the listed recipes, which update what a recipe installs
+outside winget, in one winget configure. Apps borc.yaml does not list are
+never touched, and no other recipe unit runs. An app that is not installed
+yet is skipped; borc apply installs it. A package with a fixed version, in
+borc.yaml or in a recipe, stays at that version.
 
 With <app>, upgrades only that app. The argument is read by its form, as for
 borc install:
 
-  repo/recipe or @local/<name>   the winget packages of that recipe, but not
-                                 those of the recipes it requires
+  repo/recipe or @local/<name>   the winget packages and upgrade units of that
+                                 recipe, but not those of the recipes it
+                                 requires
   no dot, such as 9NBLGGH4NNS1   that Microsoft Store ID
   anything else, such as Git.Git that winget ID
 
@@ -26,8 +29,13 @@ Options:
               recipe code. Each package is update available, up to date,
               fixed version, not installed, or unknown when winget cannot
               tell, such as for a Store app the Store gives no version for.
+              A recipe with upgrade units is not checked.
+  --check     With --what-if only: also run the testScript of each upgrade
+              unit (winget configure test), so such a recipe is update
+              available or up to date. Elevated units ask for one UAC prompt.
   -h, --help  Show this page.
 
 Exit codes:
   0     Done; with --what-if, whatever was found.
   1     A check failed or winget reported a failure.
+  3010  Windows needs a restart; restart and run borc upgrade again.

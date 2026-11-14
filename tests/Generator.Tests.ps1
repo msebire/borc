@@ -224,3 +224,52 @@ resources:
     ($singles | Where-Object Name -EQ 'recipes/npm-auth').Document.resources[0].Contains('dependsOn') | Should -BeFalse
   }
 }
+
+Describe 'Upgrade units' {
+  BeforeAll {
+    # The tool recipe, listed with or without its parameter.
+    function Get-ToolPlan {
+      param([hashtable] $Parameters = @{})
+      $text = [IO.File]::ReadAllText((Join-Path $script:FixturesRoot 'tool-upgrade.yaml'))
+      InModuleScope borc -Parameters @{ T = $text; P = $Parameters } {
+        param($T, $P)
+        $recipe = ConvertTo-BorcRecipe -Text $T -Id '@local/tool'
+        $parameters = [ordered]@{}
+        foreach ($key in $P.Keys) { $parameters[$key] = $P[$key] }
+        $config = [pscustomobject]@{ Apps = @([pscustomobject]@{ Kind = 'recipe'; Id = '@local/tool'; Parameters = $parameters }) }
+        [pscustomobject]@{ Config = $config; Recipes = [ordered]@{ '@local/tool' = $recipe }; Order = @('@local/tool'); Errors = @() }
+      }
+    }
+  }
+
+  It 'leaves them out of borc apply, borc install and --one-by-one' {
+    $plan = Get-ToolPlan -Parameters @{ channel = 'beta' }
+    InModuleScope borc -Parameters @{ Plan = $plan } {
+      param($Plan)
+      (New-BorcRunDocuments -Plan $Plan).Main.resources.name | Should -Be @('@local/tool: tool install')
+      (New-BorcSingleDocuments -Plan $Plan)[0].Document.resources.name | Should -Be @('@local/tool: tool install')
+    }
+  }
+
+  It 'puts only them in the upgrade document, without dependsOn on install units' {
+    $plan = Get-ToolPlan -Parameters @{ channel = 'beta' }
+    $upgrade = InModuleScope borc -Parameters @{ Plan = $plan } { param($Plan) New-BorcUpgradeDocument -Plan $Plan }
+    $upgrade.Document.resources.name | Should -Be @('@local/tool: tool update', '@local/tool: tool channel')
+    $upgrade.Document.resources[0].Contains('dependsOn') | Should -BeFalse
+    $upgrade.Document.resources[1].properties.input | Should -Be 'beta'
+    $upgrade.Document.resources[1].metadata.securityContext | Should -Be 'elevated'
+    $upgrade.Recipes | Should -Be @('@local/tool')
+  }
+
+  It 'drops an upgrade unit whose parameter has no value, as in borc apply' {
+    $upgrade = InModuleScope borc -Parameters @{ Plan = (Get-ToolPlan) } { param($Plan) New-BorcUpgradeDocument -Plan $Plan }
+    $upgrade.Document.resources.name | Should -Be @('@local/tool: tool update')
+    $upgrade.Dropped | Should -Be @("@local/tool: 'tool channel' skipped, no value for channel")
+  }
+
+  It 'has no document when no given recipe has upgrade units' {
+    $upgrade = InModuleScope borc -Parameters @{ Plan = (Get-ToolPlan) } { param($Plan) New-BorcUpgradeDocument -Plan $Plan -Ids @() }
+    $upgrade.Document | Should -BeNullOrEmpty
+    $upgrade.Recipes | Should -BeNullOrEmpty
+  }
+}

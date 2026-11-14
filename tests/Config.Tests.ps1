@@ -96,11 +96,22 @@ Describe 'Recipe parsing' {
     @{ Case = 'a dependsOn that is not a list'; Body = "resources:`n  - name: a`n    type: T`n  - name: b`n    type: T`n    dependsOn: a"; Expected = 'must be a list of resource names' }
     @{ Case = 'a unit that depends on itself'; Body = "resources:`n  - name: a`n    type: T`n    dependsOn: [a]"; Expected = "resource 'a' depends on itself" }
     @{ Case = 'two resources with one name'; Body = "resources:`n  - name: a`n    type: T`n  - name: a`n    type: T"; Expected = "two resources are named 'a'" }
+    @{ Case = 'an upgrade unit that is not a resource'; Body = "borc:`n  upgrade: [b]`nresources:`n  - name: a`n    type: T"; Expected = "'b' in upgrade is not a resource of this recipe" }
+    @{ Case = 'a package as an upgrade unit'; Body = "borc:`n  upgrade: [a]`nresources:`n  - name: a`n    type: Microsoft.WinGet/Package"; Expected = "'a' in upgrade is a package unit; borc upgrade already upgrades packages" }
+    @{ Case = 'a unit that waits for an upgrade unit'; Body = "borc:`n  upgrade: [b]`nresources:`n  - name: a`n    type: T`n    dependsOn: [b]`n  - name: b`n    type: T"; Expected = "resource 'a' depends on 'b', an upgrade unit; only borc upgrade runs it" }
+    @{ Case = 'an upgrade list that is not a list'; Body = "borc:`n  upgrade: b"; Expected = 'upgrade must be a list' }
   ) {
     $header = "`$schema: https://raw.githubusercontent.com/PowerShell/DSC/main/schemas/2023/08/config/document.json`nmetadata:`n  winget:`n    processor: dscv3`n"
     $text = if ($Body.StartsWith('$schema')) { $Body } else { $header + $Body }
     $recipe = InModuleScope borc -Parameters @{ Text = $text } { param($Text) ConvertTo-BorcRecipe -Text $Text -Id 'r/x' }
     ($recipe.Errors -join "`n") | Should -Match ([regex]::Escape($Expected))
+  }
+
+  It 'reads the upgrade units the BORC header names' {
+    $text = [IO.File]::ReadAllText((Join-Path $script:FixturesRoot 'tool-upgrade.yaml'))
+    $recipe = InModuleScope borc -Parameters @{ Text = $text } { param($Text) ConvertTo-BorcRecipe -Text $Text -Id '@local/tool' }
+    $recipe.Errors | Should -BeNullOrEmpty
+    $recipe.Upgrade | Should -Be @('tool update', 'tool channel')
   }
 
   It 'resolves repo recipes and @local recipes to files' {

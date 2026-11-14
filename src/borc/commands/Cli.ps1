@@ -4,7 +4,7 @@
 $script:BorcCommands = [ordered]@{
   'help' = @{ Options = @(); MinArgs = 0; MaxArgs = 1; Log = $false }
   'apply' = @{ Options = @('--what-if', '--check', '--no-pull', '--one-by-one'); MinArgs = 0; MaxArgs = 0; Log = $true }
-  'upgrade' = @{ Options = @('--what-if'); MinArgs = 0; MaxArgs = 1; Log = $true }
+  'upgrade' = @{ Options = @('--what-if', '--check'); MinArgs = 0; MaxArgs = 1; Log = $true }
   'install' = @{ Options = @(); MinArgs = 1; MaxArgs = 1; Log = $true }
   'uninstall' = @{ Options = @(); MinArgs = 1; MaxArgs = 1; Log = $true }
   'search' = @{ Options = @(); MinArgs = 1; MaxArgs = 1; Log = $true }
@@ -58,8 +58,8 @@ function Invoke-Borc {
       return 2
     }
   }
-  if ($command -eq 'apply' -and '--check' -in $options -and '--what-if' -notin $options) {
-    Write-Host '--check only works with --what-if: run borc apply --what-if --check.'
+  if ('--check' -in $options -and '--what-if' -notin $options) {
+    Write-Host "--check only works with --what-if: run borc $command --what-if --check."
     return 2
   }
   if ($positional.Count -lt $spec.MinArgs -or $positional.Count -gt $spec.MaxArgs) {
@@ -92,7 +92,7 @@ function Invoke-BorcCommand {
       'apply' { Invoke-BorcApply -Paths $paths -Preview:('--what-if' -in $Options) -Check:('--check' -in $Options) -NoPull:('--no-pull' -in $Options) -OneByOne:('--one-by-one' -in $Options) }
       'upgrade' {
         $app = "$($Positional | Select-Object -First 1)"
-        if ('--what-if' -in $Options) { Invoke-BorcUpgradePreview -Paths $paths -App $app } else { Invoke-BorcUpgrade -Paths $paths -App $app }
+        if ('--what-if' -in $Options) { Invoke-BorcUpgradePreview -Paths $paths -App $app -Check:('--check' -in $Options) } else { Invoke-BorcUpgrade -Paths $paths -App $app }
       }
       'install' { Invoke-BorcInstall -Paths $paths -App $Positional[0] }
       'uninstall' { Invoke-BorcUninstall -Paths $paths -App $Positional[0] }

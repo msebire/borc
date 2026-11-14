@@ -48,6 +48,7 @@ borc:
 | `reboot` | `true` for a recipe that may need a restart, such as one enabling Windows features. These recipes run in a first, separate run. A `reboot: true` recipe cannot require one that is not. |
 | `parameters` | The optional parameters the recipe accepts, each with a description. |
 | `secrets` | The secrets the recipe reads. Users must declare each one in `borc.yaml`. |
+| `upgrade` | The units only `borc upgrade` runs, to update what the recipe installs outside winget. See [upgrades outside winget](#upgrades-outside-winget). |
 
 Recipes are always named explicitly by users, so there are no name clash
 rules and no way for one recipe to replace another.
@@ -177,6 +178,88 @@ checks that the user declared it in `borc.yaml` and asks for its value before
 anything runs. `Get-BorcSecret` throws when the secret is missing.
 
 Never write a secret to the output, a file or a log.
+
+## Upgrades outside winget
+
+`borc upgrade` upgrades the `Microsoft.WinGet/Package` units of a recipe. An app
+the recipe installs another way, such as a .NET global tool, needs an upgrade
+unit: a script unit the BORC header names under `upgrade`.
+
+- Only `borc upgrade` runs it, after the winget packages, in one
+  `winget configure` with the upgrade units of every listed recipe.
+  `borc apply`, `borc install` and `apply --what-if --check` leave it out.
+- Its `testScript` says whether the app is up to date. It returns `$true` when
+  there is nothing to do, also when the app is not installed: installing it is
+  `borc apply`'s job. winget then skips the `setScript`.
+- `borc upgrade --what-if --check` runs that test, so it says whether an update
+  is available.
+- It follows the rules of any unit: `input` and its parameters, `Get-BorcSecret`,
+  `securityContext: elevated`.
+- No other unit may depend on it, and it cannot be a package unit.
+- Closing or restarting the app is the recipe's business. Prefer failing with a
+  clear message to closing an app that may hold unsaved work. An app the
+  `setScript` starts keeps running after winget ends; never start it with
+  `-WindowStyle Hidden`, which Windows applies to the app's own window.
+
+<!-- example: examples/recipes/recipes/codealta.yaml -->
+```yaml
+# CodeAlta, a .NET global tool, with the .NET 10 SDK it needs. winget does not
+# manage the tool, so an upgrade unit updates it.
+#
+# Layout under BORC_SETTINGS: none.
+borc:
+  description: CodeAlta desktop, with the .NET 10 SDK it needs
+  upgrade: [codealta update]
+$schema: https://raw.githubusercontent.com/PowerShell/DSC/main/schemas/2023/08/config/document.json
+metadata:
+  winget:
+    processor: dscv3
+resources:
+  - name: dotnet sdk
+    type: Microsoft.WinGet/Package
+    properties:
+      id: Microsoft.DotNet.SDK.10
+      source: winget
+  - name: codealta
+    type: Microsoft.DSC.Transitional/PowerShellScript
+    dependsOn:
+      - dotnet sdk
+    properties:
+      input: CodeAlta
+      testScript: |
+        param($package)
+        $dotnet = Join-Path $env:ProgramFiles 'dotnet\dotnet.exe'
+        [bool]((& $dotnet tool list --global | Out-String) -match "(?im)^$package\s")
+      setScript: |
+        param($package)
+        $dotnet = Join-Path $env:ProgramFiles 'dotnet\dotnet.exe'
+        & $dotnet tool install --global $package
+        if ($LASTEXITCODE -ne 0) { throw "dotnet tool install failed, exit code $LASTEXITCODE" }
+  # Only borc upgrade runs this unit: the header lists it under upgrade.
+  - name: codealta update
+    type: Microsoft.DSC.Transitional/PowerShellScript
+    properties:
+      input: CodeAlta
+      testScript: |
+        param($package)
+        # In place when the latest version is installed, or when the tool is not
+        # installed at all: installing it is borc apply's job.
+        $dotnet = Join-Path $env:ProgramFiles 'dotnet\dotnet.exe'
+        $list = & $dotnet tool list --global | Out-String
+        if ($list -notmatch "(?im)^$package\s+(\S+)") { return $true }
+        $installed = $Matches[1]
+        $index = Invoke-RestMethod "https://api.nuget.org/v3-flatcontainer/$($package.ToLowerInvariant())/index.json"
+        $installed -eq @($index.versions | Where-Object { $_ -notmatch '-' })[-1]
+      setScript: |
+        param($package)
+        # The app holds the files the update replaces.
+        if (Get-Process alta -ErrorAction SilentlyContinue) { throw 'Close CodeAlta, then run borc upgrade again.' }
+        $dotnet = Join-Path $env:ProgramFiles 'dotnet\dotnet.exe'
+        & $dotnet tool update --global $package
+        if ($LASTEXITCODE -ne 0) { throw "dotnet tool update failed, exit code $LASTEXITCODE" }
+        # Started once, the app rewrites its Start menu shortcut.
+        Start-Process (Join-Path $env:USERPROFILE '.dotnet\tools\alta.cmd')
+```
 
 ## Settings in BORC_SETTINGS
 
@@ -370,9 +453,9 @@ recipe file start with `recipe <id>:`.
 | `the file must start with $schema: ... and metadata: winget: processor: dscv3.` | The WinGet header differs from the verified one, often an `aka.ms` schema URL. |
 | `unknown top-level key '<key>'.` | Only `borc`, `$schema`, `metadata` and `resources` are allowed. |
 | `the borc header must be a map.` | `borc:` holds a list or a single value. |
-| `unknown key '<key>' in the borc header.` | Only `description`, `requires`, `reboot`, `parameters` and `secrets` are allowed. |
+| `unknown key '<key>' in the borc header.` | Only `description`, `requires`, `reboot`, `parameters`, `secrets` and `upgrade` are allowed. |
 | `reboot must be true or false.` | Another value under `reboot`. |
-| `requires must be a list, for example requires: [a, b].` | The same for `secrets`. |
+| `requires must be a list, for example requires: [a, b].` | The same for `secrets` and `upgrade`. |
 | `'<value>' is not valid in requires.` | A `requires` entry not in the `repo/recipe` form, or a `secrets` entry that is not a valid name. |
 | `parameters must map each parameter name to a description.` | `parameters` holds a list or a single value. |
 | `'<name>' is not a valid parameter name (letters, digits and '_').` | Rename the parameter. |
@@ -382,5 +465,8 @@ recipe file start with `recipe <id>:`.
 | `dependsOn of resource '<name>' must be a list of resource names.` | `dependsOn` holds a single value or something other than text. |
 | `resource '<name>' depends on '<other>', which is not a resource of this recipe. Use requires to wait for another recipe.` | A typo in the name, or a unit of another recipe: use `requires` for that. |
 | `resource '<name>' depends on itself.` | Remove the entry. |
+| `'<name>' in upgrade is not a resource of this recipe.` | A typo in the `upgrade` list, or a unit that was renamed. |
+| `'<name>' in upgrade is a package unit; borc upgrade already upgrades packages.` | Remove it from the list: `borc upgrade` moves packages anyway. |
+| `resource '<a>' depends on '<b>', an upgrade unit; only borc upgrade runs it.` | `<a>` runs in `borc apply`, where `<b>` never does. Remove the entry. |
 | `resource '<name>' uses {{<p>}}, which the borc header does not declare under parameters.` | Declare the parameter, or fix the placeholder. |
 | `resource '<name>' uses {{<p>}} outside input. Placeholders only work in input.` | Move the value into `input`. |
