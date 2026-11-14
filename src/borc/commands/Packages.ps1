@@ -16,14 +16,14 @@ function Invoke-BorcUpgrade {
 
   $result = Invoke-BorcPackageUpgrades -Packages $target.Packages
   Start-BorcStep -Name "Running the recipes' upgrade units"
-  $code = Invoke-BorcUpgradeUnits -Upgrade $upgrade
-  if ($code -eq $script:BorcRestartExitCode) {
+  $units = Invoke-BorcUpgradeUnits -Paths $Paths -Upgrade $upgrade
+  if ($units.Code -eq $script:BorcRestartExitCode) {
     Set-BorcResult -Headline 'Windows needs a restart. Restart, then run borc upgrade again.' -Color Yellow
-    return $code
+    return $units.Code
   }
-  $ran = @(if ($code -eq 0) { $upgrade.Recipes })
-  if ($code -ne 0) { $result.Failed.Add("upgrade units of $($upgrade.Recipes -join ', ')") }
-  Set-BorcUpgradeResult -Upgraded $result.Upgraded -Failed @($result.Failed) -NotInstalled $result.NotInstalled -Fixed $result.Fixed -Ran $ran
+  $ran = @(if ($units.Code -eq 0) { $upgrade.Recipes })
+  if ($units.Code -ne 0) { $result.Failed.Add("upgrade units of $($upgrade.Recipes -join ', ')") }
+  Set-BorcUpgradeResult -Upgraded $result.Upgraded -Failed @($result.Failed) -NotInstalled $result.NotInstalled -Fixed $result.Fixed -Ran $ran -Versions $units.Versions
   if ($result.Failed.Count -gt 0) { return 1 }
   0
 }
@@ -62,13 +62,19 @@ function Invoke-BorcPackageUpgrades {
 }
 
 # Runs the upgrade units of the recipes in one winget configure, so elevated
-# units ask for admin rights once. Returns 0, 1, or 3010 for a restart.
+# units ask for admin rights once. Code is 0, 1, or 3010 for a restart; Versions
+# is what the units reported with Write-BorcVersion.
 function Invoke-BorcUpgradeUnits {
-  param([Parameter(Mandatory)] $Upgrade)
-  if (-not $Upgrade.Document) { Write-BorcLog -Message 'No recipe to upgrade has upgrade units.'; return 0 }
+  param([Parameter(Mandatory)] $Paths, [Parameter(Mandatory)] $Upgrade)
+  if (-not $Upgrade.Document) {
+    Write-BorcLog -Message 'No recipe to upgrade has upgrade units.'
+    return [pscustomobject]@{ Code = 0; Versions = @() }
+  }
   Write-BorcLog -Message "Upgrade units: $($Upgrade.Document['resources'].Count), from $($Upgrade.Recipes -join ', ')."
   Write-BorcElevationNotice -Units $Upgrade.Document['resources']
-  Invoke-BorcConfigureRun -Document $Upgrade.Document -Name 'upgrade' -Command 'upgrade'
+  Clear-BorcVersionReports -Paths $Paths
+  $code = Invoke-BorcConfigureRun -Document $Upgrade.Document -Name 'upgrade' -Command 'upgrade'
+  [pscustomobject]@{ Code = $code; Versions = @(Get-BorcReportedVersions -Reports (Read-BorcVersionReports -Paths $Paths)) }
 }
 
 # What borc upgrade covers: with no <app>, every listed package and recipe. With
@@ -115,11 +121,23 @@ function Format-BorcFixedDetail {
   "$text (not installed)"
 }
 
+# Versions are the reports of the upgrade units: what they say moved joins the
+# packages that did, and without any, the units are only said to have run.
 function Set-BorcUpgradeResult {
-  param([string[]] $Upgraded = @(), [string[]] $Failed = @(), [string[]] $NotInstalled = @(), [string[]] $Fixed = @(), [string[]] $Ran = @())
+  param([string[]] $Upgraded = @(), [string[]] $Failed = @(), [string[]] $NotInstalled = @(), [string[]] $Fixed = @(), [string[]] $Ran = @(), [object[]] $Versions = @())
+  $Upgraded = @($Upgraded) + @($Versions | Where-Object State -EQ 'upgraded' | ForEach-Object Text)
   $details = [ordered]@{}
   if ($Upgraded.Count -gt 0) { $details['upgraded'] = $Upgraded -join ', ' }
-  if ($Ran.Count -gt 0) { $details['ran'] = "upgrade units of $($Ran -join ', '); winget does not say what they changed" }
+  $upToDate = @($Versions | Where-Object State -EQ 'up to date' | ForEach-Object Text)
+  if ($upToDate.Count -gt 0) { $details['up to date'] = $upToDate -join ', ' }
+  $behind = @($Versions | Where-Object State -EQ 'available' | ForEach-Object Text)
+  if ($behind.Count -gt 0) { $details['not moved'] = "$($behind -join ', '); the upgrade unit did not install the newer version" }
+  $reported = @($Versions | Where-Object State -EQ 'reported' | ForEach-Object Text)
+  if ($reported.Count -gt 0) { $details['reported'] = $reported -join ', ' }
+  if ($Ran.Count -gt 0) {
+    $note = if ($Versions.Count -gt 0) { '' } else { '; winget does not say what they changed' }
+    $details['ran'] = "upgrade units of $($Ran -join ', ')$note"
+  }
   if ($Failed.Count -gt 0) { $details['failed'] = $Failed -join ', ' }
   if ($NotInstalled.Count -gt 0) { $details['not installed'] = "$($NotInstalled -join ', '); borc apply installs them" }
   if ($Fixed.Count -gt 0) { $details['fixed version'] = $Fixed -join ', ' }

@@ -6,7 +6,7 @@
   Start-BorcSteps -Total 2
   Start-BorcStep -Name 'Updating the BORC engine'
   Update-BorcEngineClone -Path $Paths.Engine
-  Start-BorcStep -Name 'Refreshing borc.cmd, Get-BorcSecret.ps1 and the profile block'
+  Start-BorcStep -Name 'Refreshing borc.cmd, the recipe helpers and the profile block'
   $code = Invoke-BorcEngineRefresh -Paths $Paths
   if ($code -ne 0) { throw "The updated engine could not refresh its runtime files and profile block (exit code $code)." }
   $head = (Invoke-BorcGit -Arguments @('-C', $Paths.Engine, 'log', '-1', '--format=%h %cs') -Quiet).Output | Select-Object -First 1
@@ -48,11 +48,14 @@ function Update-BorcRuntime {
   if (Update-BorcProfileBlockOrExplain -Path $profilePath) { Write-Host "Updated the BORC block in $profilePath." }
 }
 
-# Copies the borc.cmd shim and Get-BorcSecret.ps1 out of the engine clone, to
-# the places recipes and the PATH expect them.
+# Copies the borc.cmd shim and the helpers recipes dot-source, Get-BorcSecret.ps1
+# and Write-BorcVersion.ps1, out of the engine clone, to the places recipes and
+# the PATH expect them.
 function Install-BorcRuntimeFiles {
   param([Parameter(Mandatory)] $Paths)
   New-Item -ItemType Directory -Path $Paths.Bin -Force | Out-Null
   Copy-Item -LiteralPath (Join-Path (Split-Path -Parent $script:BorcModuleRoot) 'borc.cmd') -Destination (Join-Path $Paths.Bin 'borc.cmd') -Force
-  Copy-Item -LiteralPath (Join-Path $script:BorcModuleRoot 'Get-BorcSecret.ps1') -Destination (Join-Path $Paths.Internal 'Get-BorcSecret.ps1') -Force
+  foreach ($helper in 'Get-BorcSecret.ps1', 'Write-BorcVersion.ps1') {
+    Copy-Item -LiteralPath (Join-Path $script:BorcModuleRoot $helper) -Destination (Join-Path $Paths.Internal $helper) -Force
+  }
 }

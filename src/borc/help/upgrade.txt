@@ -32,7 +32,8 @@ Options:
               A recipe with upgrade units is not checked.
   --check     With --what-if only: also run the testScript of each upgrade
               unit (winget configure test), so such a recipe is update
-              available or up to date. Elevated units ask for one UAC prompt.
+              available or up to date, with the versions its units report.
+              Elevated units ask for one UAC prompt.
   -h, --help  Show this page.
 
 Exit codes:

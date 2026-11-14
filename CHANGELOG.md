@@ -19,6 +19,8 @@ The version number is chosen when the release is cut.
   what they install outside winget, such as a .NET global tool. Only
   `borc upgrade` runs them, after the packages; `borc upgrade --what-if --check`
   tests them.
+- Upgrade units can report the versions they find and install with
+  `Write-BorcVersion`, so `borc upgrade` shows `4.2.0 -> 4.4.0` for those apps too.
 
 ## [0.1.2] - 2026-11-10
 

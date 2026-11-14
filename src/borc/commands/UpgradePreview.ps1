@@ -23,10 +23,14 @@ function Invoke-BorcUpgradePreview {
     return 1
   }
   $checks = $null
+  $versions = @()
   if ($Check) {
     Start-BorcStep -Name "Testing the recipes' upgrade units (winget configure test)"
-    if ($upgrade.Document) { $checks = Invoke-BorcUnitTest -Units @($upgrade.Document['resources']) -Name 'upgrade-check' }
-    else { Write-BorcLog -Message 'No recipe to check has upgrade units.'; $checks = [ordered]@{} }
+    if ($upgrade.Document) {
+      Clear-BorcVersionReports -Paths $Paths
+      $checks = Invoke-BorcUnitTest -Units @($upgrade.Document['resources']) -Name 'upgrade-check'
+      $versions = @(Get-BorcReportedVersions -Reports (Read-BorcVersionReports -Paths $Paths))
+    } else { Write-BorcLog -Message 'No recipe to check has upgrade units.'; $checks = [ordered]@{} }
   }
 
   Start-BorcStep -Name 'What borc upgrade would upgrade'
@@ -36,9 +40,9 @@ function Invoke-BorcUpgradePreview {
     foreach ($id in $upgrade.Recipes) { Get-BorcUpgradeUnitsVerdict -Id $id -Units @($upgrade.Document['resources']) -Checks $checks }
   )
   Clear-BorcInstalledList
-  Show-BorcUpgradeRows -Rows $rows
+  Show-BorcUpgradeRows -Rows $rows -Versions $versions
   Write-BorcLog -Message 'Nothing was changed (--what-if).'
-  Set-BorcUpgradePreviewResult -Rows $rows
+  Set-BorcUpgradePreviewResult -Rows $rows -Versions $versions
   0
 }
 
@@ -117,13 +121,20 @@ function Test-BorcStoreVersionKnown {
   $false
 }
 
+# The rows, then what the upgrade units reported with Write-BorcVersion, if any:
+# a report names an app, not the recipe it belongs to.
 function Show-BorcUpgradeRows {
-  param([object[]] $Rows = @())
+  param([object[]] $Rows = @(), [object[]] $Versions = @())
   if ($Rows.Count -eq 0) { Write-BorcLog -Message '  No winget package to check.'; return }
   $width = ($Rows | ForEach-Object { $_.Id.Length } | Measure-Object -Maximum).Maximum
   $colors = @{ 'update available' = 'Yellow'; 'up to date' = 'Green' }
   foreach ($row in $Rows) {
     Write-BorcPreviewLine -Text ('  {0,-16}  {1}  {2}' -f $row.State, $row.Id.PadRight($width), $row.Detail) -Color $colors[$row.State]
+  }
+  if ($Versions.Count -gt 0) {
+    Write-BorcPreviewLine -Text ''
+    Write-BorcPreviewLine -Text '  Versions the upgrade units reported:'
+    foreach ($version in $Versions) { Write-BorcPreviewLine -Text "    $($version.Text)$(if ($version.State -eq 'available') { ' available' })" }
   }
   Write-BorcPreviewLine -Text ''
   Write-BorcPreviewLine -Text "  $(Format-BorcUpgradeCounts -Rows $Rows)."
@@ -141,13 +152,14 @@ function Format-BorcUpgradeCounts {
 
 # The answer to "would borc upgrade change anything?".
 function Set-BorcUpgradePreviewResult {
-  param([object[]] $Rows = @())
+  param([object[]] $Rows = @(), [object[]] $Versions = @())
   $details = [ordered]@{}
   $groups = [ordered]@{ 'updates' = 'update available'; 'fixed version' = 'fixed version'; 'not installed' = 'not installed'; 'unknown' = 'unknown'; 'not checked' = 'not checked' }
   foreach ($label in $groups.Keys) {
     $matched = @($Rows | Where-Object State -EQ $groups[$label])
     if ($matched.Count -gt 0) { $details[$label] = ($matched | ForEach-Object { "$($_.Id) ($($_.Detail))" }) -join ', ' }
   }
+  if ($Versions.Count -gt 0) { $details['versions'] = ($Versions | ForEach-Object { "$($_.Text)$(if ($_.State -eq 'available') { ' available' })" }) -join ', ' }
   $details['counts'] = Format-BorcUpgradeCounts -Rows $Rows
   $updates = @($Rows | Where-Object State -EQ 'update available')
   $unknown = @($Rows | Where-Object State -EQ 'unknown').Count

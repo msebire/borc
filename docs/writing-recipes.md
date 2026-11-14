@@ -244,22 +244,54 @@ resources:
         param($package)
         # In place when the latest version is installed, or when the tool is not
         # installed at all: installing it is borc apply's job.
+        . "$env:LOCALAPPDATA\borc\Write-BorcVersion.ps1"
         $dotnet = Join-Path $env:ProgramFiles 'dotnet\dotnet.exe'
         $list = & $dotnet tool list --global | Out-String
         if ($list -notmatch "(?im)^$package\s+(\S+)") { return $true }
         $installed = $Matches[1]
         $index = Invoke-RestMethod "https://api.nuget.org/v3-flatcontainer/$($package.ToLowerInvariant())/index.json"
-        $installed -eq @($index.versions | Where-Object { $_ -notmatch '-' })[-1]
+        $latest = @($index.versions | Where-Object { $_ -notmatch '-' })[-1]
+        Write-BorcVersion -App $package -Installed $installed -Available $latest
+        $installed -eq $latest
       setScript: |
         param($package)
+        . "$env:LOCALAPPDATA\borc\Write-BorcVersion.ps1"
         # The app holds the files the update replaces.
         if (Get-Process alta -ErrorAction SilentlyContinue) { throw 'Close CodeAlta, then run borc upgrade again.' }
         $dotnet = Join-Path $env:ProgramFiles 'dotnet\dotnet.exe'
         & $dotnet tool update --global $package
         if ($LASTEXITCODE -ne 0) { throw "dotnet tool update failed, exit code $LASTEXITCODE" }
+        $list = & $dotnet tool list --global | Out-String
+        if ($list -match "(?im)^$package\s+(\S+)") { Write-BorcVersion -App $package -Installed $Matches[1] }
         # Started once, the app rewrites its Start menu shortcut.
         Start-Process (Join-Path $env:USERPROFILE '.dotnet\tools\alta.cmd')
 ```
+
+## Versions: Write-BorcVersion
+
+winget tells BORC the version of a package, but only the recipe knows where to
+find the version of an app it installs another way. An upgrade unit reports it
+with `Write-BorcVersion`, a helper BORC installs in `%LOCALAPPDATA%\borc` next to
+`Get-BorcSecret`. Dot-source it first, as the example above does:
+
+- In the `testScript`, report the installed version and the newest one:
+  `Write-BorcVersion -App CodeAlta -Installed $installed -Available $latest`.
+- In the `setScript`, after the update, report the version now installed:
+  `Write-BorcVersion -App CodeAlta -Installed $installed`.
+
+`borc upgrade` then reads the reports in order: a version that changed is listed
+under `upgraded` as `CodeAlta (4.2.0 -> 4.4.0)`, and the same version under
+`up to date`. `borc upgrade --what-if --check` shows the installed and newest
+versions the tests reported.
+
+- `-App` is the name the summary shows, often the name of the app.
+- The helper prints nothing, so a `testScript` still outputs one boolean, and it
+  never throws, so a report never fails a unit.
+- Each value is cut to one short line of plain text.
+- A unit that reports nothing is only said to have run, as before.
+- Elevated units report too, when UAC elevates your own account. When it asks for
+  another administrator's account, their reports go to that account's folder, and
+  BORC shows the recipe as run.
 
 ## Settings in BORC_SETTINGS
 

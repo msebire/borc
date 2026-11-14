@@ -913,6 +913,54 @@ Describe 'Commands with winget mocked' {
         }
       }
 
+      It 'reports the versions the units sent, and leaves out those of an earlier run' {
+        InModuleScope borc -Parameters @{ P = $script:Paths } {
+          param($P)
+          Mock Get-BorcPaths { $P }
+          $script:Shown = [System.Collections.Generic.List[string]]::new()
+          Mock Write-Host { $script:Shown.Add("$Object") }
+          Mock Invoke-BorcWingetQuiet { [pscustomobject]@{ ExitCode = 1; Output = @() } }
+          Mock Test-BorcRestartPending { $false }
+          $folder = Join-Path $P.Internal 'versions'
+          New-Item -ItemType Directory -Path $folder -Force | Out-Null
+          Set-Content -LiteralPath (Join-Path $folder 'stale.json') -Value '{"App":"stale","Installed":"0.1","Available":"","Ticks":1}'
+          # The units of the run: the test reports 1.0 with 2.0 available, then the set 2.0.
+          Mock Invoke-BorcWinget {
+            if ($Arguments[0] -eq 'configure') {
+              Set-Content -LiteralPath (Join-Path $folder 'a.json') -Value '{"App":"tool","Installed":"1.0","Available":"2.0","Ticks":10}'
+              Set-Content -LiteralPath (Join-Path $folder 'b.json') -Value '{"App":"tool","Installed":"2.0","Available":"","Ticks":20}'
+            }
+            0
+          }
+          Invoke-Borc -Arguments @('upgrade', '@local/tool') | Should -Be 0
+          $text = $script:Shown -join "`n"
+          $text | Should -Match 'Result: done, with changes\.\n  upgraded:\s+tool \(1\.0 -> 2\.0\)\n  ran:\s+upgrade units of @local/tool\n'
+          $text | Should -Not -Match 'stale'
+        }
+      }
+
+      It 'shows the versions a --check reported' {
+        InModuleScope borc -Parameters @{ P = $script:Paths } {
+          param($P)
+          Mock Get-BorcPaths { $P }
+          $script:Shown = [System.Collections.Generic.List[string]]::new()
+          Mock Write-Host { $script:Shown.Add("$Object") }
+          Mock Invoke-BorcWingetQuiet { [pscustomobject]@{ ExitCode = 1; Output = @() } }
+          $folder = Join-Path $P.Internal 'versions'
+          $test = @('Microsoft.DSC.Transitional/PowerShellScript [@local/tool: tool update]', '  System is not in the described configuration state.', 'Microsoft.DSC.Transitional/PowerShellScript  [@local/tool: tool channel]', '  System is in the described configuration state.')
+          Mock Invoke-BorcWingetQuiet {
+            New-Item -ItemType Directory -Path $folder -Force | Out-Null
+            Set-Content -LiteralPath (Join-Path $folder 'a.json') -Value '{"App":"tool","Installed":"1.0","Available":"2.0","Ticks":10}'
+            [pscustomobject]@{ ExitCode = 1; Output = $test }
+          } -ParameterFilter { $Arguments[0] -eq 'configure' -and $Arguments[1] -eq 'test' }
+          Mock Invoke-BorcWinget { throw 'must not change anything' }
+          Invoke-Borc -Arguments @('upgrade', '--what-if', '--check', '@local/tool') | Should -Be 0
+          $text = $script:Shown -join "`n"
+          $text | Should -Match 'Versions the upgrade units reported:\n    tool \(1\.0 -> 2\.0\) available'
+          $text | Should -Match '  versions:\s+tool \(1\.0 -> 2\.0\) available'
+        }
+      }
+
       It 'shows them as not checked with --what-if, and tests them with --check' {
         InModuleScope borc -Parameters @{ P = $script:Paths } {
           param($P)

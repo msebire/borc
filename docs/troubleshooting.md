@@ -290,6 +290,20 @@ BORC targets Windows 11. Windows 10 22H2 (build 19045) is out of support but
 still usable, so the installer warns and continues. Older Windows versions are
 refused.
 
+## borc upgrade shows no version for a recipe
+
+A recipe's upgrade units only show versions when they report them with
+`Write-BorcVersion`; otherwise the summary says they ran. When a recipe does report
+them and none appear:
+
+- **UAC asked for another account.** An elevated unit then runs as that
+  administrator, and its reports go to their `%LOCALAPPDATA%`. Run `borc upgrade`
+  from an account that is an administrator itself, or accept that the recipe shows
+  as run.
+- **The helper is missing.** `borc self-update` copies `Write-BorcVersion.ps1` to
+  `%LOCALAPPDATA%\borc`.
+- **A report could not be read.** The log names the file.
+
 ## Changing or removing a secret
 
 BORC has no command for secrets; Windows Credential Manager already does the

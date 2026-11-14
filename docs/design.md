@@ -169,6 +169,17 @@ ends, with its window, in the user's session. `Start-Process -WindowStyle Hidden
 hid the app's own window, because Windows applies it to the first window shown, so
 the docs say not to use it there.
 
+The versions of such an app reach BORC through `Write-BorcVersion`, a helper at a
+fixed path that writes one small file per report to `%LOCALAPPDATA%\borc\versions`.
+Units ignore the caller's environment, so a variable could not carry them, as for
+`Get-BorcSecret`; a `getScript` was not used, since nothing verified carries its
+output back to BORC. A Windows 11 check showed that a normal and an elevated unit,
+in `winget configure` and in `winget configure test`, both write to the user's own
+folder, and that BORC, not elevated, deletes their files. When UAC asks for another
+administrator's account, that account's folder gets the reports, and the recipe is
+shown as run, as without a report. The helper prints nothing and never throws, so a
+testScript still outputs one boolean and a report never fails a unit.
+
 ### A fixed version wins over upgrade
 
 A version written in `borc.yaml` or in a recipe is a decision: the user needs

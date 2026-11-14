@@ -535,13 +535,14 @@ Describe 'Setup steps' {
     }
   }
 
-  It 'copies the shim and Get-BorcSecret.ps1 to the runtime folders' {
+  It 'copies the shim and the recipe helpers to the runtime folders' {
     $root = New-TestFolder
     try {
       $paths = [pscustomobject]@{ Internal = $root; Bin = Join-Path $root 'bin' }
       InModuleScope borc -Parameters @{ P = $paths } { param($P) Install-BorcRuntimeFiles -Paths $P }
       Test-Path (Join-Path $root 'bin\borc.cmd') | Should -BeTrue
       Test-Path (Join-Path $root 'Get-BorcSecret.ps1') | Should -BeTrue
+      Test-Path (Join-Path $root 'Write-BorcVersion.ps1') | Should -BeTrue
     } finally {
       Remove-Item -LiteralPath $root -Recurse -Force
     }

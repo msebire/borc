@@ -97,7 +97,7 @@ Log: C:\Users\you\AppData\Local\borc\logs\20261024-101500-123-apply.log
 | Result | When |
 | --- | --- |
 | `done, with changes.` | `upgrade` moved at least one package to another version, listed under `upgraded` |
-| `done; no package moved, and the upgrade units ran.` | `upgrade` ran the recipes' upgrade units, listed under `ran`; winget does not say what they changed |
+| `done; no package moved, and the upgrade units ran.` | `upgrade` ran the recipes' upgrade units, listed under `ran`. Units that report their versions with `Write-BorcVersion` are listed under `upgraded`, `up to date`, `not moved` (a newer version was reported but not installed) or `reported`; without a report, winget does not say what they changed |
 | `done; nothing to upgrade.` | `upgrade` found nothing to move. `not installed` and `fixed version` list what it left alone |
 | `Windows needs a restart. ...` | an upgrade unit left Windows waiting for a restart |
 | `some upgrades failed; ...` | winget could not upgrade the packages listed under `failed` |
@@ -330,7 +330,8 @@ Options:
               A recipe with upgrade units is not checked.
   --check     With --what-if only: also run the testScript of each upgrade
               unit (winget configure test), so such a recipe is update
-              available or up to date. Elevated units ask for one UAC prompt.
+              available or up to date, with the versions its units report.
+              Elevated units ask for one UAC prompt.
   -h, --help  Show this page.
 
 Exit codes:
@@ -364,7 +365,8 @@ packages `borc upgrade` would cover: the same list, or only `<app>`.
   can tell, and `--what-if` runs no recipe code. Add `--check` to run those tests
   in one `winget configure test`: the recipe is then `update available` (a unit
   would run), `up to date`, or `unknown` when a test fails. Elevated units ask for
-  one UAC prompt.
+  one UAC prompt. Versions the tests report with `Write-BorcVersion` are listed
+  under the table and under `versions`.
 - **Other recipe units** are never checked, nor run by `borc upgrade`.
 
 ## borc install
