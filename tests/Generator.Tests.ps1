@@ -69,7 +69,7 @@ Describe 'Merged configuration' {
   }
 
   It 'substitutes placeholders in input' {
-    ($script:Runs.Main.resources | Where-Object name -EQ 'recipes/node: npm cache').properties.input | Should -Be 'D:\caches\npm'
+    ($script:Runs.Main.resources | Where-Object name -EQ 'recipes/node: npm cache').properties.input | Should -Be '%LOCALAPPDATA%\npm-cache'
   }
 
   It 'accepts agreements on every package unit, from borc.yaml or from a recipe' {
@@ -208,8 +208,9 @@ resources:
   }
 
   It 'never lets a value break the YAML' {
-    InModuleScope borc {
-      $value = "C:\a: b # c`n- d"
+    InModuleScope borc -Parameters @{ D = $script:SystemDrive } {
+      param($D)
+      $value = "$D\a: b # c`n- d"
       $expanded = Expand-BorcPlaceholders -Node 'pre {{p}}' -Parameters ([ordered]@{ p = $value })
       $document = New-BorcDocument -Units @([ordered]@{ name = 'u'; type = 'T'; properties = [ordered]@{ input = $expanded } })
       (ConvertFrom-BorcYaml -Text (ConvertTo-BorcYaml -Data $document)).resources[0].properties.input | Should -Be "pre $value"

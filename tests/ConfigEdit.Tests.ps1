@@ -14,7 +14,7 @@ apps:
   - winget: Git.Git
   - recipe: recipes/node
     parameters:
-      npmCache: D:\caches\npm   # keep the cache off C:
+      npmCache: '%LOCALAPPDATA%\npm-cache'   # keep the cache out of the profile
   - msstore: 9NBLGGH4NNS1
   # - recipe: recipes/idea
 
@@ -32,8 +32,8 @@ Describe 'Adding an app to borc.yaml' {
   }
 
   It 'goes after the parameters of a last recipe item' {
-    $text = "apps:`n  - recipe: recipes/node`n    parameters:`n      npmCache: D:\x`nsecrets: {}`n"
-    Add-Entry $text 'winget' 'Git.Git' | Should -BeExactly "apps:`n  - recipe: recipes/node`n    parameters:`n      npmCache: D:\x`n  - winget: Git.Git`nsecrets: {}`n"
+    $text = "apps:`n  - recipe: recipes/node`n    parameters:`n      npmCache: x`nsecrets: {}`n"
+    Add-Entry $text 'winget' 'Git.Git' | Should -BeExactly "apps:`n  - recipe: recipes/node`n    parameters:`n      npmCache: x`n  - winget: Git.Git`nsecrets: {}`n"
   }
 
   It 'quotes @local recipes' {
@@ -78,7 +78,7 @@ Describe 'Removing an app from borc.yaml' {
 
   It 'removes a recipe item with its parameters and their comments' {
     $result = Remove-Entry $script:Sample 'recipe' 'recipes/node'
-    $result | Should -BeExactly $script:Sample.Replace("  - recipe: recipes/node`n    parameters:`n      npmCache: D:\caches\npm   # keep the cache off C:`n", '')
+    $result | Should -BeExactly $script:Sample.Replace("  - recipe: recipes/node`n    parameters:`n      npmCache: '%LOCALAPPDATA%\npm-cache'   # keep the cache out of the profile`n", '')
   }
 
   It 'matches quoted values and ignores case' {

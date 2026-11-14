@@ -37,6 +37,17 @@ Describe 'Repository conventions' {
     }
     $bad | Should -BeNullOrEmpty
   }
+
+  It 'names no drive in the tests, which build paths on $script:SystemDrive instead' {
+    $tests = Join-Path $script:RepoRoot 'tests\'
+    $bad = foreach ($file in $script:TrackedFiles | Where-Object { $_.StartsWith($tests, [StringComparison]::OrdinalIgnoreCase) }) {
+      $lines = [IO.File]::ReadAllLines($file)
+      for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i] -match '(?<![\w%\\])[A-Za-z]:\\') { "${file}:$($i + 1)" }
+      }
+    }
+    $bad | Should -BeNullOrEmpty
+  }
 }
 
 Describe 'Module' {

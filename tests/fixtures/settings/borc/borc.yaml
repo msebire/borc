@@ -7,7 +7,7 @@ apps:
   - recipe: recipes/npm-auth
   - recipe: recipes/node
     parameters:
-      npmCache: D:\caches\npm
+      npmCache: '%LOCALAPPDATA%\npm-cache'
   - recipe: recipes/idea
   - recipe: '@local/wsl-ubuntu'
   - recipe: recipes/wsl

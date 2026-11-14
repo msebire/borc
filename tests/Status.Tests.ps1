@@ -31,11 +31,14 @@ AfterAll {
 Describe 'Welcome banner of the starter template' {
   BeforeAll {
     $script:Welcome = Join-Path $script:RepoRoot 'src\borc\template\borc\scripts\welcome.ps1'
+    # An empty folder: a fixed path could be a real config repo with the example recipe.
+    $script:Settings = Join-Path $TestDrive 'settings'
+    New-Item -ItemType Directory -Path $script:Settings | Out-Null
 
     # A child process: the banner is loaded the way the profile block loads it.
     function Invoke-Welcome {
       param([string] $After = '', [string] $NoColor = '1')
-      $command = "`$env:BORC_SETTINGS = 'D:\settings'; `$env:NO_COLOR = '$NoColor'; . '$script:Welcome'; $After"
+      $command = "`$env:BORC_SETTINGS = '$script:Settings'; `$env:NO_COLOR = '$NoColor'; . '$script:Welcome'; $After"
       @(pwsh -NoProfile -NonInteractive -Command $command)
     }
   }
@@ -47,11 +50,11 @@ Describe 'Welcome banner of the starter template' {
 
   It 'shows the configuration folder and the next steps' {
     $text = (Invoke-Welcome) -join "`n"
-    $text | Should -Match 'Your configuration is in D:\\settings'
+    $text | Should -Match ([regex]::Escape("Your configuration is in $script:Settings"))
     $text | Should -Match 'Commands and tips: README\.md'
     $text | Should -Match '1\. Add apps\s+borc install <id>, or edit borc\\borc\.yaml'
     $text | Should -Match '2\. Apply them\s+borc apply'
-    $text | Should -Match '3\. Save them\s+commit in D:\\settings, add a remote and push'
+    $text | Should -Match ('3\. Save them\s+commit in ' + [regex]::Escape($script:Settings) + ', add a remote and push')
     $text | Should -Match 'delete borc\\scripts\\welcome\.ps1'
   }
 
@@ -69,7 +72,7 @@ Describe 'Welcome banner of the starter template' {
   }
 
   It 'writes only to the host, so it never ends up in captured output' {
-    $command = "`$env:BORC_SETTINGS = 'D:\settings'; `$captured = @(. '$script:Welcome' 6>`$null); `$captured.Count"
+    $command = "`$env:BORC_SETTINGS = '$script:Settings'; `$captured = @(. '$script:Welcome' 6>`$null); `$captured.Count"
     pwsh -NoProfile -NonInteractive -Command $command | Should -Be '0'
   }
 
@@ -79,7 +82,7 @@ Describe 'Welcome banner of the starter template' {
   }
 
   It 'uses colours, and drops them with NO_COLOR' {
-    $command = "`$env:BORC_SETTINGS = 'D:\settings'; `$env:NO_COLOR = '{0}'; . '$script:Welcome' 6>&1 | ForEach-Object {{ `$_.MessageData.ForegroundColor }} | Where-Object {{ `$null -ne `$_ }} | Select-Object -Unique"
+    $command = "`$env:BORC_SETTINGS = '$script:Settings'; `$env:NO_COLOR = '{0}'; . '$script:Welcome' 6>&1 | ForEach-Object {{ `$_.MessageData.ForegroundColor }} | Where-Object {{ `$null -ne `$_ }} | Select-Object -Unique"
     @(pwsh -NoProfile -NonInteractive -Command ($command -f '')) | Should -Contain 'Cyan'
     @(pwsh -NoProfile -NonInteractive -Command ($command -f '1')) | Should -Not -Contain 'Cyan'
   }

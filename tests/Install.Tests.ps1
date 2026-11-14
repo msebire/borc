@@ -96,7 +96,7 @@ Describe 'PowerShell Gallery modules for the installer' {
   }
 
   It 'names the module, not App Installer, when the module cannot be installed' {
-    Mock Install-BorcGalleryModule { throw "Could not find a part of the path 'C:\Users\x\Documents\WindowsPowerShell\Modules'." }
+    Mock Install-BorcGalleryModule { throw "Could not find a part of the path '%USERPROFILE%\Documents\WindowsPowerShell\Modules'." }
     $message = try { Update-BorcWinget; '' } catch { $_.Exception.Message }
     $message | Should -Match 'Could not install the PowerShell module Microsoft\.WinGet\.Client'
     $message | Should -Match 'BORC_SKIP_UPDATES=1'
@@ -173,7 +173,7 @@ Describe 'After the install' {
       Mock Start-BorcStep {}
       Mock Complete-BorcRun {}
       Mock Install-BorcYamlModule {}
-      Mock Get-BorcFolderSetting { 'D:\borc-test-not-used' }
+      Mock Get-BorcFolderSetting { 'borc-test-not-used' }
       Mock Initialize-BorcSettingsInteractive {}
       Mock New-Item {}
       Mock Install-BorcRuntimeFiles {}
@@ -356,14 +356,14 @@ Describe 'Installer output' {
   }
 
   It 'does not call a command done when its code means the work stopped' {
-    $code = Invoke-InstallCommand -FilePath 'git' -Arguments @('-C', 'Z:\no\such\folder', 'status') -StopCodes @{ 128 = 'stopped for a reason' } 2>$null
+    $code = Invoke-InstallCommand -FilePath 'git' -Arguments @('-C', (Join-Path $TestDrive 'no-such-folder'), 'status') -StopCodes @{ 128 = 'stopped for a reason' } 2>$null
     $code | Should -Be 128
     $script:Shown[-1].Text | Should -Match '^  < stopped after \d+s: stopped for a reason$'
     $script:Shown[-1].Color | Should -Be 'Yellow'
   }
 
   It 'ends a failing command with its exit code' {
-    Invoke-InstallCommand -FilePath 'git' -Arguments @('-C', 'Z:\no\such\folder', 'status') 2>$null | Should -Not -Be 0
+    Invoke-InstallCommand -FilePath 'git' -Arguments @('-C', (Join-Path $TestDrive 'no-such-folder'), 'status') 2>$null | Should -Not -Be 0
     $script:Shown[-1].Text | Should -Match '^  < failed, exit code \d+, after \d+s$'
     $script:Shown[-1].Color | Should -Be 'Red'
   }
@@ -477,46 +477,50 @@ Describe 'powershell-yaml for the engine' {
 
 Describe 'Setup steps' {
   It 'accepts only full paths with a drive letter for the folders' {
-    InModuleScope borc {
-      Test-BorcFolderPath -Path 'D:\settings\' | Should -BeTrue
+    InModuleScope borc -Parameters @{ D = $script:SystemDrive } {
+      param($D)
+      Test-BorcFolderPath -Path "$D\settings\" | Should -BeTrue
       Test-BorcFolderPath -Path 'settings\' | Should -BeFalse
       Test-BorcFolderPath -Path '\\server\share\' | Should -BeFalse
     }
   }
 
   It 'reuses a folder variable that is already set' {
-    InModuleScope borc {
+    InModuleScope borc -Parameters @{ D = $script:SystemDrive } {
+      param($D)
       Mock Write-Host {}
-      Mock Get-BorcEnvironmentVariable { 'D:\settings' } -ParameterFilter { $Name -eq 'BORC_SETTINGS' -and $Scope -eq 'User' }
+      Mock Get-BorcEnvironmentVariable { "$D\settings" } -ParameterFilter { $Name -eq 'BORC_SETTINGS' -and $Scope -eq 'User' }
       Mock Read-BorcInput { throw 'must not ask' }
-      Get-BorcFolderSetting -Name 'BORC_SETTINGS' -Purpose 'x' -Example 'D:\settings' | Should -Be 'D:\settings'
+      Get-BorcFolderSetting -Name 'BORC_SETTINGS' -Purpose 'x' -Example "$D\settings" | Should -Be "$D\settings"
     }
   }
 
   It 'asks again until the folder is a full path' {
-    InModuleScope borc {
+    InModuleScope borc -Parameters @{ D = $script:SystemDrive } {
+      param($D)
       Mock Write-Host {}
       Mock Get-BorcEnvironmentVariable { $null }
-      $script:Answers = [System.Collections.Generic.Queue[string]]::new([string[]]@('settings', '"D:\settings\"'))
+      $script:Answers = [System.Collections.Generic.Queue[string]]::new([string[]]@('settings', "`"$D\settings\`""))
       Mock Read-BorcInput { $script:Answers.Dequeue() }
-      Get-BorcFolderSetting -Name 'BORC_SETTINGS' -Purpose 'x' -Example 'D:\settings' | Should -Be 'D:\settings'
+      Get-BorcFolderSetting -Name 'BORC_SETTINGS' -Purpose 'x' -Example "$D\settings" | Should -Be "$D\settings"
     }
   }
 
   It 'adds the bin folder to the user PATH once, keeping unexpanded entries' {
-    InModuleScope borc {
+    InModuleScope borc -Parameters @{ D = $script:SystemDrive } {
+      param($D)
       Mock Write-Host {}
-      $script:UserPath = '%USERPROFILE%\tools;C:\other'
+      $script:UserPath = "%USERPROFILE%\tools;$D\other"
       Mock Get-BorcUserPath { $script:UserPath }
       Mock Set-BorcUserPath { $script:UserPath = $Value }
       $processPath = $env:Path
       try {
-        Add-BorcUserPath -Folder 'C:\Users\x\AppData\Local\borc\bin'
-        Add-BorcUserPath -Folder 'C:\Users\x\AppData\Local\borc\bin\'
+        Add-BorcUserPath -Folder "$D\Users\x\AppData\Local\borc\bin"
+        Add-BorcUserPath -Folder "$D\Users\x\AppData\Local\borc\bin\"
       } finally {
         $env:Path = $processPath
       }
-      $script:UserPath | Should -Be '%USERPROFILE%\tools;C:\other;C:\Users\x\AppData\Local\borc\bin'
+      $script:UserPath | Should -Be "%USERPROFILE%\tools;$D\other;$D\Users\x\AppData\Local\borc\bin"
       Should -Invoke Set-BorcUserPath -Times 1 -Exactly
     }
   }

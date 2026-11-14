@@ -274,7 +274,7 @@ Describe 'Commands with winget mocked' {
 
     It 'refuses to run with an unknown parameter, before anything runs' {
       $path = Join-Path $script:Settings 'borc\borc.yaml'
-      (Get-Content $path -Raw).Replace("  - recipe: recipes/idea`n", "  - recipe: recipes/idea`n    parameters:`n      ideaHome: D:\idea`n") | Set-Content $path -NoNewline
+      (Get-Content $path -Raw).Replace("  - recipe: recipes/idea`n", "  - recipe: recipes/idea`n    parameters:`n      ideaHome: $script:SystemDrive\idea`n") | Set-Content $path -NoNewline
       git -C $script:Settings -c user.name=borc-test -c user.email=borc-test@example.invalid commit --quiet -am param
       InModuleScope borc -Parameters @{ P = $script:Paths } {
         param($P)
@@ -314,7 +314,7 @@ Describe 'Commands with winget mocked' {
         Mock Get-BorcPaths { $P }
         $script:Shown = [System.Collections.Generic.List[string]]::new()
         Mock Write-Host { $script:Shown.Add("$Object") }
-        Mock Sync-BorcConfigRepo { throw 'git failed to pull D:\settings (exit code 1).' }
+        Mock Sync-BorcConfigRepo { throw 'git failed to pull the config repo (exit code 1).' }
         Mock Invoke-BorcWinget { 0 }
         Invoke-Borc -Arguments @('apply') | Should -Be 1
         ($script:Shown -join "`n") | Should -Match 'Result: nothing was applied: the pull failed \(see the git error above\)\.\n  tip: borc apply --no-pull'
