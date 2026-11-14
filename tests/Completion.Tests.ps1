@@ -45,7 +45,7 @@ Describe 'borc Tab completion' {
     @{ Line = 'borc install Git.'; Expected = @('Git.GCM', 'Git.Git') }
     @{ Line = 'borc uninstall '; Expected = @('Git.Git', '9NBLGGH4NNS1', "'@local/sysinternals'") }
     @{ Line = 'borc search no'; Expected = @('node') }
-    @{ Line = 'borc upgrade --'; Expected = @('--help') }
+    @{ Line = 'borc upgrade --'; Expected = @('--what-if', '--help') }
     @{ Line = 'borc upgrade '; Expected = @('Git.Git', '9NBLGGH4NNS1', "'@local/sysinternals'") }
     @{ Line = 'borc upgrade 9'; Expected = @('9NBLGGH4NNS1') }
   ) {

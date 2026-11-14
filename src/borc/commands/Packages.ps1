@@ -57,12 +57,12 @@ function Select-BorcUpgradeTarget {
 }
 
 function Write-BorcNotListed {
-  param([Parameter(Mandatory)] [string] $App)
+  param([Parameter(Mandatory)] [string] $App, [string] $Headline = 'nothing was upgraded')
   $isRecipe = (Get-BorcAppKind -App $App) -eq 'recipe'
   $where = if ($isRecipe) { 'is not listed in borc.yaml' } else { 'is not listed in borc.yaml, nor installed by a listed recipe' }
   $term = if ($isRecipe) { ($App -split '/', 2)[1] } else { $App }
   Write-BorcLog -Message "$App $where. Find the right $(if ($isRecipe) { 'name' } else { 'ID' }) with borc search $term, or add it with borc install $App." -Level Error
-  Set-BorcResult -Headline "nothing was upgraded: $App is not listed in borc.yaml." -Details ([ordered]@{ tip = "borc search $term, or borc install $App" }) -Color Red
+  Set-BorcResult -Headline "$($Headline): $App is not listed in borc.yaml." -Details ([ordered]@{ tip = "borc search $term, or borc install $App" }) -Color Red
   1
 }
 

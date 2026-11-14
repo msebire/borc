@@ -132,6 +132,22 @@ Predictable, and it never touches apps BORC did not install. That leaves out
 winget and Microsoft.DSC, which rarely need to move and can break configuration
 files when they do, so they only move when the installer is run again.
 
+### upgrade --what-if reads winget's list only
+
+The answer to "is there an update?" comes from one `winget list --upgrade-available`,
+filtered to what `borc upgrade` covers, so it stays quick and runs no recipe code, as
+`apply --what-if` does. On winget 1.29, packages winget only upgrades when named by
+ID come in a second table after the first; BORC counts them, since `borc upgrade`
+names each package. The per-ID form is not used: with no update, it says "No
+installed package found", as for a package that is not there.
+
+What winget cannot tell is shown as `unknown`, never as `up to date`. A Store app
+can have no version in the Store (seen for an exe installer from the Store), and
+then winget never lists an update for it; BORC asks `winget show` for each
+installed Store app, and says `unknown` when the version is missing. Output BORC
+cannot read, such as winget in another language, fails the check rather than
+reporting no update.
+
 ### A fixed version wins over upgrade
 
 A version written in `borc.yaml` or in a recipe is a decision: the user needs

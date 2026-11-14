@@ -271,3 +271,81 @@ Describe 'Verdict summary' {
     ($lines -join "`n") | Should -Match 'winget could not test some of its units'
   }
 }
+
+Describe 'Reading winget list --upgrade-available' {
+  It 'reads both tables of real winget 1.29 output, explicit targeting included' {
+    $lines = [IO.File]::ReadAllLines((Join-Path $script:FixturesRoot 'winget-upgrade-available.txt'))
+    $updates = InModuleScope borc -Parameters @{ L = $lines } { param($L) ConvertFrom-WingetUpgradeList -Lines $L }
+    @($updates.Keys) | Should -Be @('Google.Chrome', 'Microsoft.VCRedist.2015+.x86', 'Microsoft.WSL', 'Discord.Discord')
+    $updates['Microsoft.VCRedist.2015+.x86'] | Should -Be '14.52.37029.0'
+    $updates['Discord.Discord'] | Should -Be '1.0.9268'
+  }
+
+  It 'reads the no-match line as no update, and anything else as unreadable' {
+    InModuleScope borc {
+      $none = ConvertFrom-WingetUpgradeList -Lines @('No installed package found matching input criteria.')
+      $none.Count | Should -Be 0
+      $null -eq $none | Should -BeFalse
+      $null -eq (ConvertFrom-WingetUpgradeList -Lines @('Aucun package installé ne correspond aux critères.')) | Should -BeTrue
+    }
+  }
+
+  It 'finds an ID winget cut short with an ellipsis' {
+    InModuleScope borc {
+      $updates = [ordered]@{ ("Microsoft.VisualStudio.2022.Commun" + [char]0x2026) = '17.14.1' }
+      Find-BorcAvailableUpdate -Updates $updates -Id 'Microsoft.VisualStudio.2022.Community' | Should -Be '17.14.1'
+      Find-BorcAvailableUpdate -Updates $updates -Id 'Git.Git' | Should -BeNullOrEmpty
+    }
+  }
+}
+
+Describe 'Upgrade verdicts' {
+  It 'says <Expected> for <Case>' -ForEach @(
+    @{ Case = 'a listed update'; Installed = '2.47.0'; Version = ''; Source = 'winget'; Store = $true; Expected = 'update available'; Detail = '2.47.0 -> 2.48.1' }
+    @{ Case = 'no listed update'; Installed = '2.47.0'; Version = ''; Source = 'winget'; Store = $true; Expected = 'up to date'; Detail = '2.47.0'; Updates = @{} }
+    @{ Case = 'a fixed version'; Installed = '2.45.1'; Version = '2.45.1'; Source = 'winget'; Store = $true; Expected = 'fixed version'; Detail = '2.45.1 installed, borc.yaml fixes it at 2.45.1; 2.48.1 available' }
+    @{ Case = 'a missing package'; Installed = $null; Version = ''; Source = 'winget'; Store = $true; Expected = 'not installed'; Detail = 'borc apply installs it' }
+    @{ Case = 'an unknown installed version'; Installed = 'unknown'; Version = ''; Source = 'winget'; Store = $true; Expected = 'unknown'; Detail = 'winget does not know the installed version'; Updates = @{} }
+    @{ Case = 'a Store app with no Store version'; Installed = '12.18.0'; Version = ''; Source = 'msstore'; Store = $false; Expected = 'unknown'; Detail = '12.18.0 installed; the Store gives no version, so winget cannot tell'; Updates = @{} }
+    @{ Case = 'a Store app with a Store version'; Installed = '12.18.0'; Version = ''; Source = 'msstore'; Store = $true; Expected = 'up to date'; Detail = '12.18.0'; Updates = @{} }
+  ) {
+    $updates = if ($null -ne $Updates) { $Updates } else { @{ 'Some.App' = '2.48.1' } }
+    $row = InModuleScope borc -Parameters @{ I = $Installed; V = $Version; S = $Source; K = $Store; U = $updates } {
+      param($I, $V, $S, $K, $U)
+      Mock Get-BorcInstalledVersion { $I }
+      Mock Test-BorcStoreVersionKnown { $K }
+      $package = [pscustomobject]@{ Source = $S; Id = 'Some.App'; Version = $V; Origin = 'borc.yaml' }
+      Get-BorcUpgradeVerdict -Package $package -Updates ([ordered]@{} + $U)
+    }
+    $row.State | Should -Be $Expected
+    $row.Detail | Should -Be $Detail
+  }
+
+  It 'asks the Store for its version and reads Unknown as no version' {
+    InModuleScope borc {
+      Mock Invoke-BorcWingetQuiet { [pscustomobject]@{ ExitCode = 0; Output = @('Found Hotspot Shield [XPDNLRV08ZCH53]', 'Version: Unknown', 'Publisher: Pango Inc.') } }
+      Test-BorcStoreVersionKnown -Id 'XPDNLRV08ZCH53' | Should -BeFalse
+      Mock Invoke-BorcWingetQuiet { [pscustomobject]@{ ExitCode = 0; Output = @('Found Some App [9ABC]', 'Version: 1.2.3') } }
+      Test-BorcStoreVersionKnown -Id '9ABC' | Should -BeTrue
+      Should -Invoke Invoke-BorcWingetQuiet -ParameterFilter { $Arguments[0] -eq 'show' -and $Arguments -contains 'msstore' }
+    }
+  }
+
+  It 'counts the states, and answers whether borc upgrade would change anything' {
+    InModuleScope borc {
+      Mock Set-BorcResult {}
+      $rows = @(
+        [pscustomobject]@{ State = 'update available'; Id = 'Git.Git'; Detail = '1 -> 2' }
+        [pscustomobject]@{ State = 'up to date'; Id = 'jq'; Detail = '1.8' }
+        [pscustomobject]@{ State = 'unknown'; Id = '9X'; Detail = 'why' }
+      )
+      Format-BorcUpgradeCounts -Rows $rows | Should -Be '1 update available, 1 up to date, 0 fixed, 0 not installed, 1 unknown'
+      Set-BorcUpgradePreviewResult -Rows $rows
+      Should -Invoke Set-BorcResult -ParameterFilter { $Headline -eq 'borc upgrade would upgrade 1 package.' -and $Details['updates'] -eq 'Git.Git (1 -> 2)' }
+      Set-BorcUpgradePreviewResult -Rows $rows[1..2]
+      Should -Invoke Set-BorcResult -ParameterFilter { $Headline -eq 'probably nothing to upgrade; 1 could not be checked.' }
+      Set-BorcUpgradePreviewResult -Rows $rows[1]
+      Should -Invoke Set-BorcResult -ParameterFilter { $Headline -eq 'nothing to upgrade.' }
+    }
+  }
+}

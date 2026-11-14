@@ -82,6 +82,15 @@ Log: C:\Users\you\AppData\Local\borc\logs\20261024-101500-123-apply.log
 | `probably nothing to apply; N recipes could not be fully tested.` | the same with `--check`, when winget could not test some units |
 | `nothing to apply.` | everything is in place and nothing would be pulled or asked |
 
+### The result of `borc upgrade --what-if`
+
+| Result | When |
+| --- | --- |
+| `borc upgrade would upgrade N packages.` | winget lists an update for N packages `borc upgrade` would move, listed under `updates` |
+| `probably nothing to upgrade; N could not be checked.` | no update is listed, but winget cannot tell for the packages under `unknown` |
+| `nothing to upgrade.` | every package is up to date, fixed or not installed |
+| `nothing was checked: ...` | `borc.yaml` or a recipe has a problem, the app is not listed, or winget's list could not be read |
+
 ### The result of `borc upgrade`, `install` and `uninstall`
 
 | Result | When |
@@ -112,6 +121,7 @@ In PowerShell 7, press Tab after `borc` to complete:
 | `borc ` | the commands |
 | `borc help ` | the commands |
 | `borc apply --` | `--what-if`, `--no-pull`, `--one-by-one`, `--help`, and `--check` once `--what-if` is there |
+| `borc upgrade --` | `--what-if`, `--help` |
 | `borc install ` | your `@local` recipes and the recipes of the cloned recipe repos; winget IDs once the text has a dot, such as `Git.` |
 | `borc upgrade `, `borc uninstall ` | the apps and recipes `borc.yaml` lists |
 | `borc search ` | recipe names |
@@ -283,7 +293,7 @@ runs, and no `setScript` does. Every recipe then gets a definite verdict:
 
 <!-- help: upgrade -->
 ```text
-Usage: borc upgrade [<app>]
+Usage: borc upgrade [--what-if] [<app>]
 
 Upgrades, through winget, the apps borc.yaml lists: the plain winget and
 Store IDs, and the winget packages of the listed recipes. Apps borc.yaml does
@@ -306,8 +316,40 @@ winget and Microsoft.DSC are not covered: run the one-line installer again
 to update them.
 
 Options:
+  --what-if   Show which of these packages have an update, and to which
+              version, from one winget list. Changes nothing and runs no
+              recipe code. Each package is update available, up to date,
+              fixed version, not installed, or unknown when winget cannot
+              tell, such as for a Store app the Store gives no version for.
   -h, --help  Show this page.
+
+Exit codes:
+  0     Done; with --what-if, whatever was found.
+  1     A check failed or winget reported a failure.
 ```
+
+### What `upgrade --what-if` checks
+
+One `winget list --upgrade-available` gives the updates winget knows, for the
+packages `borc upgrade` would cover: the same list, or only `<app>`.
+
+```text
+==> [3/3] What borc upgrade would upgrade
+  update available  Git.Git                  2.47.0 -> 2.48.1
+  up to date        Microsoft.PowerToys      0.86.0
+  fixed version     jqlang.jq                1.7.1 installed, borc.yaml fixes it at 1.7.1; 1.8.0 available
+  not installed     Canonical.Ubuntu.2404    borc apply installs it
+  unknown           XPDNLRV08ZCH53           12.18.0.12328 installed; the Store gives no version, so winget cannot tell
+
+  1 update available, 1 up to date, 1 fixed, 1 not installed, 1 unknown.
+```
+
+- **Packages winget only upgrades when named by ID** are counted too:
+  `borc upgrade` names each package.
+- **A fixed version** shows the newer one, but `borc upgrade` leaves it alone.
+- **`unknown`** means winget cannot tell: the installed version is unknown, or
+  the Store gives no version for the app, which BORC asks with `winget show`.
+- **Recipes' settings** are not checked: only their winget packages are.
 
 ## borc install
 

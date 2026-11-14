@@ -1,4 +1,4 @@
-Usage: borc upgrade [<app>]
+Usage: borc upgrade [--what-if] [<app>]
 
 Upgrades, through winget, the apps borc.yaml lists: the plain winget and
 Store IDs, and the winget packages of the listed recipes. Apps borc.yaml does
@@ -21,4 +21,13 @@ winget and Microsoft.DSC are not covered: run the one-line installer again
 to update them.
 
 Options:
+  --what-if   Show which of these packages have an update, and to which
+              version, from one winget list. Changes nothing and runs no
+              recipe code. Each package is update available, up to date,
+              fixed version, not installed, or unknown when winget cannot
+              tell, such as for a Store app the Store gives no version for.
   -h, --help  Show this page.
+
+Exit codes:
+  0     Done; with --what-if, whatever was found.
+  1     A check failed or winget reported a failure.

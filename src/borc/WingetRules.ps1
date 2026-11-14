@@ -62,6 +62,24 @@ $script:WingetTestFailed = 'The configuration unit failed while attempting to te
 # code APPINSTALLER_CLI_ERROR_PACKAGE_IS_STUB, which is not what happened here.
 $script:WingetConfigureNotEnabled = 0x8A150069
 
+# winget list --upgrade-available, seen on 2026-11-14 with winget 1.29.380 (English
+# UI). A table "Name Id Version Available Source" ends with "N upgrades available.";
+# packages winget only upgrades when named by ID follow in a second table with the
+# same columns, after "...but require explicit targeting for upgrade:". Columns are
+# padded to the longest value, so each row is cut where its own header puts them.
+# --include-unknown and --include-pinned changed nothing on that machine. With no
+# update, winget prints "No installed package found matching input criteria.",
+# which is also its answer for --id of a package with no update: BORC reads the
+# full list only.
+$script:WingetUpgradeListArguments = @('list', '--upgrade-available', '--accept-source-agreements', '--disable-interactivity')
+$script:WingetUpgradeHeaderPattern = '^Name\s+Id\s+Version\s+Available\s+Source\s*$'
+$script:WingetNoInstalledMatch = 'No installed package found matching input criteria.'
+
+# Store apps, seen the same day: for an msstore package with an exe installer,
+# winget show --source msstore gives "Version: Unknown", so winget has nothing to
+# compare and never lists an update for it. BORC asks, and says "unknown" then.
+$script:WingetShowVersionPattern = '^Version:\s*(?<version>\S+)'
+
 # winget exit codes that do not mean a failure for upgrade and uninstall.
 $script:WingetNoApplicableUpgrade = 0x8A15002B
 $script:WingetNoPackageFound = 0x8A150014
@@ -123,6 +141,31 @@ function Add-WingetPackageAgreement {
   param([Parameter(Mandatory)] $Unit)
   if ($Unit['type'] -ne $script:WingetPackageType -or $Unit['properties'] -isnot [System.Collections.IDictionary]) { return }
   if (-not $Unit['properties'].Contains('acceptAgreements')) { $Unit['properties']['acceptAgreements'] = $true }
+}
+
+# The packages winget lists with an update, as ID -> available version, from both
+# tables. $null when the output has neither a table nor the no-match line, so text
+# BORC cannot read is never taken for "no update".
+function ConvertFrom-WingetUpgradeList {
+  param([string[]] $Lines = @())
+  $updates = [ordered]@{}
+  $known = $false
+  $columns = $null
+  foreach ($line in $Lines) {
+    if ($line -match $script:WingetUpgradeHeaderPattern) {
+      $columns = @{ Id = $line.IndexOf(' Id ') + 1; Version = $line.IndexOf(' Version ') + 1; Available = $line.IndexOf(' Available ') + 1; Source = $line.IndexOf(' Source') + 1 }
+      $known = $true
+      continue
+    }
+    if ($line.Trim() -eq $script:WingetNoInstalledMatch) { $known = $true; continue }
+    if (-not $columns -or $line -match '^-+$') { continue }
+    # A blank line or "N upgrades available." ends the table.
+    if ($line.Length -lt $columns.Source) { $columns = $null; continue }
+    $id = $line.Substring($columns.Id, $columns.Version - $columns.Id).Trim()
+    $available = $line.Substring($columns.Available, $columns.Source - $columns.Available).Trim()
+    if ($id -and $available) { $updates[$id] = $available }
+  }
+  if ($known) { $updates } else { $null }
 }
 
 # The version winget list shows for an installed package: the column right

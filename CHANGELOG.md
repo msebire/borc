@@ -13,6 +13,8 @@ The version number is chosen when the release is cut.
 
 - `borc upgrade <app>` upgrades one app or recipe that `borc.yaml` lists, read by
   its form as `borc install` reads it, and Tab completes it.
+- `borc upgrade --what-if` shows which listed packages have an update, and to
+  which version, without changing anything.
 
 ## [0.1.2] - 2026-11-10
 

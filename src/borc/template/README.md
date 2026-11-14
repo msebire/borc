@@ -27,6 +27,7 @@ BORC's starter template, so make it yours.
 | `borc uninstall <app>` | Uninstall an app and remove it from `borc.yaml` |
 | `borc upgrade` | Upgrade the apps `borc.yaml` lists |
 | `borc upgrade <app>` | Upgrade only one of them, or the packages of one recipe |
+| `borc upgrade --what-if` | Show which of them have an update, without upgrading |
 | `borc self-update` | Update BORC itself |
 | `borc help <command>` | Show the full page of one command |
 

@@ -775,6 +775,65 @@ Describe 'Commands with winget mocked' {
       }
     }
 
+    It 'previews with --what-if from one list of updates, without upgrading' {
+      $lines = [IO.File]::ReadAllLines((Join-Path $script:FixturesRoot 'winget-upgrade-available.txt'))
+      InModuleScope borc -Parameters @{ P = $script:Paths; L = $lines } {
+        param($P, $L)
+        Mock Get-BorcPaths { $P }
+        $script:Shown = [System.Collections.Generic.List[string]]::new()
+        Mock Write-Host { $script:Shown.Add("$Object") }
+        Mock Invoke-BorcWingetQuiet { [pscustomobject]@{ ExitCode = 1; Output = @() } }
+        Mock Invoke-BorcWingetQuiet { [pscustomobject]@{ ExitCode = 0; Output = $L } } -ParameterFilter { $Arguments -contains '--upgrade-available' }
+        Mock Invoke-BorcWingetQuiet { [pscustomobject]@{ ExitCode = 0; Output = @('Version: 1.0') } } -ParameterFilter { $Arguments[0] -eq 'show' }
+        # Everything is installed at 1.0, and the list has an update for Microsoft.WSL only.
+        Mock Get-BorcInstalledVersion { '1.0' }
+        Mock Invoke-BorcWinget { throw 'must not upgrade with --what-if' }
+        Invoke-Borc -Arguments @('upgrade', '--what-if') | Should -Be 0
+        $text = $script:Shown -join "`n"
+        $text | Should -Match 'up to date\s+Git\.Git\s+1\.0'
+        $text | Should -Match 'Nothing was changed \(--what-if\)\.'
+        $text | Should -Match 'Result: nothing to upgrade\.'
+        Should -Invoke Invoke-BorcWingetQuiet -Times 1 -Exactly -ParameterFilter { $Arguments -contains '--upgrade-available' }
+      }
+    }
+
+    It 'previews one app with --what-if, and refuses one borc.yaml does not list' {
+      InModuleScope borc -Parameters @{ P = $script:Paths } {
+        param($P)
+        Mock Get-BorcPaths { $P }
+        $script:Shown = [System.Collections.Generic.List[string]]::new()
+        Mock Write-Host { $script:Shown.Add("$Object") }
+        $row = '{0,-7}{1,-19}{2,-8}{3,-10}{4}'
+        $list = @(($row -f 'Name', 'Id', 'Version', 'Available', 'Source'), ('-' * 50), ($row -f 'NodeJS', 'OpenJS.NodeJS.LTS', '22.1.0', '22.2.0', 'winget'), '1 upgrades available.')
+        Mock Invoke-BorcWingetQuiet { [pscustomobject]@{ ExitCode = 1; Output = @() } }
+        Mock Invoke-BorcWingetQuiet { [pscustomobject]@{ ExitCode = 0; Output = $list } } -ParameterFilter { $Arguments -contains '--upgrade-available' }
+        Mock Get-BorcInstalledVersion { '22.1.0' }
+        Mock Invoke-BorcWinget { throw 'must not upgrade with --what-if' }
+        Invoke-Borc -Arguments @('upgrade', '--what-if', 'recipes/node') | Should -Be 0
+        $text = $script:Shown -join "`n"
+        $text | Should -Match 'update available\s+OpenJS\.NodeJS\.LTS\s+22\.1\.0 -> 22\.2\.0'
+        $text | Should -Not -Match 'Git\.Git'
+        $text | Should -Match 'Result: borc upgrade would upgrade 1 package\.'
+        $script:Shown.Clear()
+        Invoke-Borc -Arguments @('upgrade', '--what-if', 'Git.Gti') | Should -Be 1
+        ($script:Shown -join "`n") | Should -Match 'Result: nothing was checked: Git\.Gti is not listed in borc\.yaml\.'
+      }
+    }
+
+    It 'fails --what-if when winget prints a list BORC cannot read' {
+      InModuleScope borc -Parameters @{ P = $script:Paths } {
+        param($P)
+        Mock Get-BorcPaths { $P }
+        $script:Shown = [System.Collections.Generic.List[string]]::new()
+        Mock Write-Host { $script:Shown.Add("$Object") }
+        Mock Invoke-BorcWingetQuiet { [pscustomobject]@{ ExitCode = 1; Output = @() } }
+        Mock Invoke-BorcWingetQuiet { [pscustomobject]@{ ExitCode = 0; Output = @('Nom  ID  Version  Disponible  Source') } } -ParameterFilter { $Arguments -contains '--upgrade-available' }
+        Mock Invoke-BorcWinget { throw 'must not upgrade with --what-if' }
+        Invoke-Borc -Arguments @('upgrade', '--what-if') | Should -Be 1
+        ($script:Shown -join "`n") | Should -Match "Result: nothing was checked: BORC could not read winget's list of updates"
+      }
+    }
+
     It 'ends upgrade with what changed version and what failed' {
       InModuleScope borc -Parameters @{ P = $script:Paths } {
         param($P)

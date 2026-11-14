@@ -4,7 +4,7 @@
 $script:BorcCommands = [ordered]@{
   'help' = @{ Options = @(); MinArgs = 0; MaxArgs = 1; Log = $false }
   'apply' = @{ Options = @('--what-if', '--check', '--no-pull', '--one-by-one'); MinArgs = 0; MaxArgs = 0; Log = $true }
-  'upgrade' = @{ Options = @(); MinArgs = 0; MaxArgs = 1; Log = $true }
+  'upgrade' = @{ Options = @('--what-if'); MinArgs = 0; MaxArgs = 1; Log = $true }
   'install' = @{ Options = @(); MinArgs = 1; MaxArgs = 1; Log = $true }
   'uninstall' = @{ Options = @(); MinArgs = 1; MaxArgs = 1; Log = $true }
   'search' = @{ Options = @(); MinArgs = 1; MaxArgs = 1; Log = $true }
@@ -90,7 +90,10 @@ function Invoke-BorcCommand {
   try {
     $result = switch ($Command) {
       'apply' { Invoke-BorcApply -Paths $paths -Preview:('--what-if' -in $Options) -Check:('--check' -in $Options) -NoPull:('--no-pull' -in $Options) -OneByOne:('--one-by-one' -in $Options) }
-      'upgrade' { Invoke-BorcUpgrade -Paths $paths -App "$($Positional | Select-Object -First 1)" }
+      'upgrade' {
+        $app = "$($Positional | Select-Object -First 1)"
+        if ('--what-if' -in $Options) { Invoke-BorcUpgradePreview -Paths $paths -App $app } else { Invoke-BorcUpgrade -Paths $paths -App $app }
+      }
       'install' { Invoke-BorcInstall -Paths $paths -App $Positional[0] }
       'uninstall' { Invoke-BorcUninstall -Paths $paths -App $Positional[0] }
       'search' { Invoke-BorcSearch -Paths $paths -Term $Positional[0] }
