@@ -280,9 +280,9 @@ with `Write-BorcVersion`, a helper BORC installs in `%LOCALAPPDATA%\borc` next t
   `Write-BorcVersion -App CodeAlta -Installed $installed`.
 
 `borc upgrade` then reads the reports in order: a version that changed is listed
-under `upgraded` as `CodeAlta (4.2.0 -> 4.4.0)`, and the same version under
-`up to date`. `borc upgrade --what-if --check` shows the installed and newest
-versions the tests reported.
+under `upgraded`, with the old and the new version, and one that did not change
+is only written to the log. `borc upgrade --what-if --check` shows the installed
+and newest versions the tests reported, in its table.
 
 - `-App` is the name the summary shows, often the name of the app.
 - The helper prints nothing, so a `testScript` still outputs one boolean, and it

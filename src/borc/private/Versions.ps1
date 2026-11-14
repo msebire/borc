@@ -69,6 +69,6 @@ function Get-BorcReportedVersions {
     elseif ($entry.Available -and $entry.Available -ne $entry.After) { 'available', "$($entry.App) ($($entry.After) -> $($entry.Available))" }
     elseif ($entry.Count -ge 2 -or $entry.Available) { 'up to date', "$($entry.App) $($entry.After)" }
     else { 'reported', "$($entry.App) $($entry.After)" }
-    [pscustomobject]@{ App = $entry.App; State = $state; Text = $text }
+    [pscustomobject]@{ App = $entry.App; State = $state; Text = $text; Before = $entry.Before; After = $entry.After; Available = $entry.Available }
   }
 }

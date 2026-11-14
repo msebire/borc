@@ -74,21 +74,19 @@ function Find-BorcAvailableUpdate {
   $null
 }
 
-# One row: update available, up to date, fixed version, not installed or unknown.
+# One row: update available, up to date, fixed version, not installed or unknown,
+# with the installed and available versions in columns of their own.
 function Get-BorcUpgradeVerdict {
   param([Parameter(Mandatory)] $Package, [Parameter(Mandatory)] [System.Collections.IDictionary] $Updates)
   $installed = Get-BorcInstalledVersion -Id $Package.Id
   $available = Find-BorcAvailableUpdate -Updates $Updates -Id $Package.Id
-  $state, $detail = if (-not $installed) { 'not installed', 'borc apply installs it' }
-  elseif ($Package.Version) {
-    $newer = if ($available) { "; $available available" } else { '' }
-    'fixed version', "$installed installed, $($Package.Origin) fixes it at $($Package.Version)$newer"
-  }
-  elseif ($available) { 'update available', "$installed -> $available" }
-  elseif ($installed -eq 'unknown') { 'unknown', 'winget does not know the installed version' }
-  elseif ($Package.Source -eq 'msstore' -and -not (Test-BorcStoreVersionKnown -Id $Package.Id)) { 'unknown', "$installed installed; the Store gives no version, so winget cannot tell" }
-  else { 'up to date', $installed }
-  [pscustomobject]@{ Kind = 'package'; State = $state; Id = $Package.Id; Detail = $detail }
+  $row = [pscustomobject]@{ Kind = 'package'; State = 'up to date'; Id = $Package.Id; Installed = "$installed"; Available = ''; Note = '' }
+  if (-not $installed) { $row.State = 'not installed'; $row.Note = 'borc apply installs it' }
+  elseif ($Package.Version) { $row.State = 'fixed version'; $row.Available = "$available"; $row.Note = "fixed at $($Package.Version) in $($Package.Origin)" }
+  elseif ($available) { $row.State = 'update available'; $row.Available = $available }
+  elseif ($installed -eq 'unknown') { $row.State = 'unknown'; $row.Installed = ''; $row.Note = 'winget does not know the installed version' }
+  elseif ($Package.Source -eq 'msstore' -and -not (Test-BorcStoreVersionKnown -Id $Package.Id)) { $row.State = 'unknown'; $row.Note = 'the Store gives no version, so winget cannot tell' }
+  $row
 }
 
 # A recipe's row from its upgrade units: without --check they are not checked;
@@ -98,7 +96,7 @@ function Get-BorcUpgradeUnitsVerdict {
   $prefix = "${Id}: "
   $names = @($Units | ForEach-Object { [string]$_['name'] } | Where-Object { $_.StartsWith($prefix) })
   $short = { param($Name) $Name.Substring($prefix.Length) }
-  $state, $detail = if ($null -eq $Checks) { 'not checked', "upgrade units: $(($names | ForEach-Object { & $short $_ }) -join ', '); --check tests them" }
+  $state, $note = if ($null -eq $Checks) { 'not checked', "upgrade units: $(($names | ForEach-Object { & $short $_ }) -join ', '); --check tests them" }
   else {
     $out = @($names | Where-Object { $Checks[$_].State -eq 'out' } | ForEach-Object { & $short $_ })
     $unknown = @($names | Where-Object { $Checks[$_].State -notin 'in', 'out' } | ForEach-Object { "$(& $short $_) ($(if ($Checks[$_]) { $Checks[$_].Message } else { 'no result from winget' }))" })
@@ -106,7 +104,7 @@ function Get-BorcUpgradeUnitsVerdict {
     elseif ($unknown.Count -gt 0) { 'unknown', "could not test: $($unknown -join '; ')" }
     else { 'up to date', "upgrade units: $($names.Count) of $($names.Count) in place" }
   }
-  [pscustomobject]@{ Kind = 'recipe'; State = $state; Id = $Id; Detail = $detail }
+  [pscustomobject]@{ Kind = 'recipe'; State = $state; Id = $Id; Installed = ''; Available = ''; Note = $note }
 }
 
 # Whether the Store gives a version for an app, without which winget never lists
@@ -121,21 +119,27 @@ function Test-BorcStoreVersionKnown {
   $false
 }
 
-# The rows, then what the upgrade units reported with Write-BorcVersion, if any:
-# a report names an app, not the recipe it belongs to.
+# A version an upgrade unit reported, as a row of the table. A report names an
+# app, not its recipe, so it gets a row of its own, left out of the counts.
+function ConvertTo-BorcVersionRow {
+  param([Parameter(Mandatory)] $Version)
+  $state = switch ($Version.State) { 'available' { 'update available' } 'up to date' { 'up to date' } default { 'reported' } }
+  [pscustomobject]@{ Kind = 'app'; State = $state; Id = $Version.App; Installed = $Version.After; Available = $(if ($Version.State -eq 'available') { $Version.Available } else { '' }); Note = 'version reported by an upgrade unit' }
+}
+
+# The table: the packages, the recipes with upgrade units, then the versions
+# their units reported, in aligned columns under a header.
 function Show-BorcUpgradeRows {
   param([object[]] $Rows = @(), [object[]] $Versions = @())
   if ($Rows.Count -eq 0) { Write-BorcLog -Message '  No winget package to check.'; return }
-  $width = ($Rows | ForEach-Object { $_.Id.Length } | Measure-Object -Maximum).Maximum
+  $all = @($Rows) + @($Versions | ForEach-Object { ConvertTo-BorcVersionRow -Version $_ })
+  $cells = [System.Collections.Generic.List[object]]::new()
+  $cells.Add(@('State', 'App', 'Installed', 'Available', ''))
+  foreach ($row in $all) { $cells.Add(@($row.State, $row.Id, $row.Installed, $row.Available, $row.Note)) }
+  $lines = @(Format-BorcColumns -Rows $cells.ToArray())
   $colors = @{ 'update available' = 'Yellow'; 'up to date' = 'Green' }
-  foreach ($row in $Rows) {
-    Write-BorcPreviewLine -Text ('  {0,-16}  {1}  {2}' -f $row.State, $row.Id.PadRight($width), $row.Detail) -Color $colors[$row.State]
-  }
-  if ($Versions.Count -gt 0) {
-    Write-BorcPreviewLine -Text ''
-    Write-BorcPreviewLine -Text '  Versions the upgrade units reported:'
-    foreach ($version in $Versions) { Write-BorcPreviewLine -Text "    $($version.Text)$(if ($version.State -eq 'available') { ' available' })" }
-  }
+  Write-BorcPreviewLine -Text "  $($lines[0])"
+  for ($i = 1; $i -lt $lines.Count; $i++) { Write-BorcPreviewLine -Text "  $($lines[$i])" -Color $colors[$all[$i - 1].State] }
   Write-BorcPreviewLine -Text ''
   Write-BorcPreviewLine -Text "  $(Format-BorcUpgradeCounts -Rows $Rows)."
 }
@@ -150,16 +154,33 @@ function Format-BorcUpgradeCounts {
   $text
 }
 
-# The answer to "would borc upgrade change anything?".
+# The answer to "would borc upgrade change anything?", with only what needs
+# attention: what is up to date is in the table above, not repeated here.
 function Set-BorcUpgradePreviewResult {
   param([object[]] $Rows = @(), [object[]] $Versions = @())
   $details = [ordered]@{}
-  $groups = [ordered]@{ 'updates' = 'update available'; 'fixed version' = 'fixed version'; 'not installed' = 'not installed'; 'unknown' = 'unknown'; 'not checked' = 'not checked' }
-  foreach ($label in $groups.Keys) {
-    $matched = @($Rows | Where-Object State -EQ $groups[$label])
-    if ($matched.Count -gt 0) { $details[$label] = ($matched | ForEach-Object { "$($_.Id) ($($_.Detail))" }) -join ', ' }
+  $columns = [ordered]@{
+    # An empty cell must stay '': an empty $(...) would drop it and shift the columns.
+    'updates' = @{ State = 'update available'; Cells = { param($r) @($r.Id, $r.Installed, $(if ($r.Available) { "-> $($r.Available)" } else { '' }), $r.Note) } }
+    'fixed version' = @{ State = 'fixed version'; Cells = { param($r) @($r.Id, $r.Installed, $r.Note, $(if ($r.Available) { "$($r.Available) available" } else { '' })) } }
+    'not installed' = @{ State = 'not installed'; Cells = { param($r) @(, $r.Id) } }
+    'unknown' = @{ State = 'unknown'; Cells = { param($r) @($r.Id, $r.Installed, $r.Note) } }
+    'not checked' = @{ State = 'not checked'; Cells = { param($r) @($r.Id, $r.Note) } }
   }
-  if ($Versions.Count -gt 0) { $details['versions'] = ($Versions | ForEach-Object { "$($_.Text)$(if ($_.State -eq 'available') { ' available' })" }) -join ', ' }
+  foreach ($label in $columns.Keys) {
+    $matched = @($Rows | Where-Object State -EQ $columns[$label].State)
+    if ($matched.Count -eq 0) { continue }
+    $cells = [System.Collections.Generic.List[object]]::new()
+    foreach ($row in $matched) { $cells.Add((& $columns[$label].Cells $row)) }
+    $details[$label] = @(Format-BorcColumns -Rows $cells.ToArray())
+    if ($label -eq 'not installed') { $details[$label] += '(borc apply installs them)' }
+  }
+  $newer = @($Versions | Where-Object State -EQ 'available')
+  if ($newer.Count -gt 0) {
+    $cells = [System.Collections.Generic.List[object]]::new()
+    foreach ($version in $newer) { $cells.Add(@($version.App, $version.After, "-> $($version.Available)")) }
+    $details['new versions'] = @(Format-BorcColumns -Rows $cells.ToArray())
+  }
   $details['counts'] = Format-BorcUpgradeCounts -Rows $Rows
   $updates = @($Rows | Where-Object State -EQ 'update available')
   $unknown = @($Rows | Where-Object State -EQ 'unknown').Count

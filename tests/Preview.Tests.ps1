@@ -301,13 +301,13 @@ Describe 'Reading winget list --upgrade-available' {
 
 Describe 'Upgrade verdicts' {
   It 'says <Expected> for <Case>' -ForEach @(
-    @{ Case = 'a listed update'; Installed = '2.47.0'; Version = ''; Source = 'winget'; Store = $true; Expected = 'update available'; Detail = '2.47.0 -> 2.48.1' }
-    @{ Case = 'no listed update'; Installed = '2.47.0'; Version = ''; Source = 'winget'; Store = $true; Expected = 'up to date'; Detail = '2.47.0'; Updates = @{} }
-    @{ Case = 'a fixed version'; Installed = '2.45.1'; Version = '2.45.1'; Source = 'winget'; Store = $true; Expected = 'fixed version'; Detail = '2.45.1 installed, borc.yaml fixes it at 2.45.1; 2.48.1 available' }
-    @{ Case = 'a missing package'; Installed = $null; Version = ''; Source = 'winget'; Store = $true; Expected = 'not installed'; Detail = 'borc apply installs it' }
-    @{ Case = 'an unknown installed version'; Installed = 'unknown'; Version = ''; Source = 'winget'; Store = $true; Expected = 'unknown'; Detail = 'winget does not know the installed version'; Updates = @{} }
-    @{ Case = 'a Store app with no Store version'; Installed = '12.18.0'; Version = ''; Source = 'msstore'; Store = $false; Expected = 'unknown'; Detail = '12.18.0 installed; the Store gives no version, so winget cannot tell'; Updates = @{} }
-    @{ Case = 'a Store app with a Store version'; Installed = '12.18.0'; Version = ''; Source = 'msstore'; Store = $true; Expected = 'up to date'; Detail = '12.18.0'; Updates = @{} }
+    @{ Case = 'a listed update'; Installed = '2.47.0'; Version = ''; Source = 'winget'; Store = $true; Expected = 'update available'; Cells = @('2.47.0', '2.48.1', '') }
+    @{ Case = 'no listed update'; Installed = '2.47.0'; Version = ''; Source = 'winget'; Store = $true; Expected = 'up to date'; Cells = @('2.47.0', '', ''); Updates = @{} }
+    @{ Case = 'a fixed version'; Installed = '2.45.1'; Version = '2.45.1'; Source = 'winget'; Store = $true; Expected = 'fixed version'; Cells = @('2.45.1', '2.48.1', 'fixed at 2.45.1 in borc.yaml') }
+    @{ Case = 'a missing package'; Installed = $null; Version = ''; Source = 'winget'; Store = $true; Expected = 'not installed'; Cells = @('', '', 'borc apply installs it') }
+    @{ Case = 'an unknown installed version'; Installed = 'unknown'; Version = ''; Source = 'winget'; Store = $true; Expected = 'unknown'; Cells = @('', '', 'winget does not know the installed version'); Updates = @{} }
+    @{ Case = 'a Store app with no Store version'; Installed = '12.18.0'; Version = ''; Source = 'msstore'; Store = $false; Expected = 'unknown'; Cells = @('12.18.0', '', 'the Store gives no version, so winget cannot tell'); Updates = @{} }
+    @{ Case = 'a Store app with a Store version'; Installed = '12.18.0'; Version = ''; Source = 'msstore'; Store = $true; Expected = 'up to date'; Cells = @('12.18.0', '', ''); Updates = @{} }
   ) {
     $updates = if ($null -ne $Updates) { $Updates } else { @{ 'Some.App' = '2.48.1' } }
     $row = InModuleScope borc -Parameters @{ I = $Installed; V = $Version; S = $Source; K = $Store; U = $updates } {
@@ -318,7 +318,7 @@ Describe 'Upgrade verdicts' {
       Get-BorcUpgradeVerdict -Package $package -Updates ([ordered]@{} + $U)
     }
     $row.State | Should -Be $Expected
-    $row.Detail | Should -Be $Detail
+    @($row.Installed, $row.Available, $row.Note) | Should -Be $Cells
   }
 
   It 'asks the Store for its version and reads Unknown as no version' {
@@ -331,17 +331,29 @@ Describe 'Upgrade verdicts' {
     }
   }
 
+  It 'keeps the columns of the updates when a recipe has no version' {
+    InModuleScope borc {
+      Mock Set-BorcResult {}
+      $rows = @(
+        [pscustomobject]@{ Kind = 'package'; State = 'update available'; Id = 'Git.Git'; Installed = '1'; Available = '2'; Note = '' }
+        [pscustomobject]@{ Kind = 'recipe'; State = 'update available'; Id = '@local/x'; Installed = ''; Available = ''; Note = 'would run: u' }
+      )
+      Set-BorcUpgradePreviewResult -Rows $rows
+      Should -Invoke Set-BorcResult -ParameterFilter { ($Details['updates'] -join '|') -eq 'Git.Git   1  -> 2|@local/x           would run: u' }
+    }
+  }
+
   It 'counts the states, and answers whether borc upgrade would change anything' {
     InModuleScope borc {
       Mock Set-BorcResult {}
       $rows = @(
-        [pscustomobject]@{ State = 'update available'; Id = 'Git.Git'; Detail = '1 -> 2' }
-        [pscustomobject]@{ State = 'up to date'; Id = 'jq'; Detail = '1.8' }
-        [pscustomobject]@{ State = 'unknown'; Id = '9X'; Detail = 'why' }
+        [pscustomobject]@{ Kind = 'package'; State = 'update available'; Id = 'Git.Git'; Installed = '1'; Available = '2'; Note = '' }
+        [pscustomobject]@{ Kind = 'package'; State = 'up to date'; Id = 'jqlang.jq'; Installed = '1.8'; Available = ''; Note = '' }
+        [pscustomobject]@{ Kind = 'package'; State = 'unknown'; Id = '9X'; Installed = '3'; Available = ''; Note = 'why' }
       )
       Format-BorcUpgradeCounts -Rows $rows | Should -Be '1 update available, 1 up to date, 0 fixed, 0 not installed, 1 unknown'
       Set-BorcUpgradePreviewResult -Rows $rows
-      Should -Invoke Set-BorcResult -ParameterFilter { $Headline -eq 'borc upgrade would upgrade 1 package.' -and $Details['updates'] -eq 'Git.Git (1 -> 2)' }
+      Should -Invoke Set-BorcResult -ParameterFilter { $Headline -eq 'borc upgrade would upgrade 1 package.' -and $Details['updates'] -eq 'Git.Git  1  -> 2' -and $Details['unknown'] -eq '9X  3  why' -and -not $Details.Contains('up to date') }
       Set-BorcUpgradePreviewResult -Rows $rows[1..2]
       Should -Invoke Set-BorcResult -ParameterFilter { $Headline -eq 'probably nothing to upgrade; 1 could not be checked.' }
       Set-BorcUpgradePreviewResult -Rows $rows[1]

@@ -98,9 +98,14 @@ function Write-BorcResult {
   Add-BorcLogLine -Line $headline
   $width = ($result.Details.Keys | ForEach-Object { "$_".Length } | Measure-Object -Maximum).Maximum
   foreach ($label in $result.Details.Keys) {
-    $line = '  {0} {1}' -f "${label}:".PadRight($width + 1), $result.Details[$label]
-    Write-BorcConsole -Text $line
-    Add-BorcLogLine -Line $line
+    # A list, such as the packages with an update, gets one item per line.
+    $prefix = '  {0} ' -f "${label}:".PadRight($width + 1)
+    $items = @($result.Details[$label])
+    for ($i = 0; $i -lt [Math]::Max($items.Count, 1); $i++) {
+      $line = $(if ($i -eq 0) { $prefix } else { ' ' * $prefix.Length }) + $(if ($items.Count -gt 0) { $items[$i] })
+      Write-BorcConsole -Text $line.TrimEnd()
+      Add-BorcLogLine -Line $line.TrimEnd()
+    }
   }
   $script:BorcResult = $null
 }
@@ -111,6 +116,18 @@ function Complete-BorcRun {
   $status = switch ($ExitCode) { 0 { 'done' } 3010 { 'restart' } default { 'failed' } }
   Complete-BorcStep -Status $status
   Write-BorcSummary
+}
+
+# Rows of cells as lines, each column padded to its widest cell, two spaces
+# apart. A column empty in every row is left out; trailing spaces are trimmed.
+function Format-BorcColumns {
+  param([object[]] $Rows = @())
+  $count = [int]($Rows | ForEach-Object { @($_).Count } | Measure-Object -Maximum).Maximum
+  $widths = @(for ($i = 0; $i -lt $count; $i++) { [int]($Rows | ForEach-Object { "$(@($_)[$i])".Length } | Measure-Object -Maximum).Maximum })
+  foreach ($row in $Rows) {
+    $cells = @(for ($i = 0; $i -lt $count; $i++) { if ($widths[$i] -gt 0) { "$(@($row)[$i])".PadRight($widths[$i]) } })
+    ($cells -join '  ').TrimEnd()
+  }
 }
 
 function Write-BorcCommandStart {

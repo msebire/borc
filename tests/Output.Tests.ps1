@@ -113,6 +113,25 @@ Describe 'Result and log line' {
     }
   }
 
+  It 'pads columns to their widest cell, and leaves out a column empty in every row' {
+    $rows = [System.Collections.Generic.List[object]]::new()
+    $rows.Add(@('Git.Git', '', '1.0', '-> 2.0'))
+    $rows.Add(@('jqlang.jq', '', '1.7.1', ''))
+    InModuleScope borc -Parameters @{ R = $rows.ToArray() } { param($R) Format-BorcColumns -Rows $R } | Should -Be @('Git.Git    1.0    -> 2.0', 'jqlang.jq  1.7.1')
+  }
+
+  It 'shows a list detail one item per line, aligned under the first' {
+    $text = InModuleScope borc {
+      $script:Shown = [System.Collections.Generic.List[string]]::new()
+      Mock Write-Host { $script:Shown.Add("$Object") }
+      Mock Add-BorcLogLine {}
+      Set-BorcResult -Headline 'two updates.' -Details ([ordered]@{ updates = @('Git.Git (1 -> 2)', 'jqlang.jq (1.7 -> 1.8)'); counts = '2 updates' })
+      Write-BorcResult
+      $script:Shown -join "`n"
+    }
+    $text | Should -Be "`nResult: two updates.`n  updates: Git.Git (1 -> 2)`n           jqlang.jq (1.7 -> 1.8)`n  counts:  2 updates"
+  }
+
   It 'shows a result once, and none when a command sets none' {
     $lines = Get-HostLines {
       Start-BorcSteps -Total 1; Start-BorcStep -Name 'A'; Set-BorcResult -Headline 'x.'; Complete-BorcRun -ExitCode 0

@@ -100,10 +100,10 @@ function Get-BorcPackageVersions {
   $versions
 }
 
-# Packages installed both before and after, at another version: "Id (1 -> 2)".
+# Packages installed both before and after, at another version.
 function Get-BorcVersionChanges {
   param([System.Collections.IDictionary] $Before, [System.Collections.IDictionary] $After)
-  $After.Keys | Where-Object { $After[$_] -and $Before[$_] -and $After[$_] -ne $Before[$_] } | ForEach-Object { "$_ ($($Before[$_]) -> $($After[$_]))" }
+  $After.Keys | Where-Object { $After[$_] -and $Before[$_] -and $After[$_] -ne $Before[$_] } | ForEach-Object { [pscustomobject]@{ Id = $_; Before = $Before[$_]; After = $After[$_] } }
 }
 
 # What apply did, as far as BORC can know: winget prints "Unit successfully
@@ -125,7 +125,7 @@ function Set-BorcApplyResult {
   $pulledText = @($Pulls.Keys | ForEach-Object { "$_ $($Pulls[$_])" }) -join ', '
   $details['pulled'] = if ($NoPull) { (@($pulledText) + 'skipped (--no-pull)' | Where-Object { $_ }) -join '; ' } elseif ($pulledText) { $pulledText } else { 'nothing new' }
   $details['installed'] = if ($installed.Count -gt 0) { $installed -join ', ' } else { 'nothing new' }
-  if ($upgraded.Count -gt 0) { $details['version changed'] = $upgraded -join ', ' }
+  if ($upgraded.Count -gt 0) { $details['version changed'] = ($upgraded | ForEach-Object { "$($_.Id) ($($_.Before) -> $($_.After))" }) -join ', ' }
   if ($Recipes -gt 0) { $details['recipes'] = Format-BorcRecipesDetail -Recipes $Recipes -ExitCode $ExitCode }
   if ($Secrets.Count -gt 0) { $details['secrets'] = "stored $($Secrets -join ', ')" }
   $changed = $Pulls.Count -gt 0 -or $installed.Count -gt 0 -or $upgraded.Count -gt 0 -or $Secrets.Count -gt 0

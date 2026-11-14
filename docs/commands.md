@@ -51,7 +51,8 @@ Log: C:\Users\you\AppData\Local\borc\logs\20261024-101500-123-apply.log
   BORC is installed, but its first `borc apply` did not finish. When a command
   stops early, the last line says after which step.
 - **`Result:`** answers what the run did, or, with `--what-if`, what it would
-  do. Its first line is the answer; the lines below give the detail.
+  do. Its first line is the answer; the lines below give the detail. A list,
+  such as the packages with an update, has one item per line.
 - The log path comes last, after a blank line, in dark gray.
 
 ### The result of `borc apply`
@@ -97,7 +98,7 @@ Log: C:\Users\you\AppData\Local\borc\logs\20261024-101500-123-apply.log
 | Result | When |
 | --- | --- |
 | `done, with changes.` | `upgrade` moved at least one package to another version, listed under `upgraded` |
-| `done; no package moved, and the upgrade units ran.` | `upgrade` ran the recipes' upgrade units, listed under `ran`. Units that report their versions with `Write-BorcVersion` are listed under `upgraded`, `up to date`, `not moved` (a newer version was reported but not installed) or `reported`; without a report, winget does not say what they changed |
+| `done; no package moved, and the upgrade units ran.` | `upgrade` ran the recipes' upgrade units, listed under `ran`. An app whose unit reports with `Write-BorcVersion` is listed under `upgraded` when its version changed, or `not moved` when a newer one was reported but not installed; other reports are in the log. Without a report, winget does not say what they changed |
 | `done; nothing to upgrade.` | `upgrade` found nothing to move. `not installed` and `fixed version` list what it left alone |
 | `Windows needs a restart. ...` | an upgrade unit left Windows waiting for a restart |
 | `some upgrades failed; ...` | winget could not upgrade the packages listed under `failed` |
@@ -345,16 +346,35 @@ Exit codes:
 One `winget list --upgrade-available` gives the updates winget knows, for the
 packages `borc upgrade` would cover: the same list, or only `<app>`.
 
-```text
-==> [3/3] What borc upgrade would upgrade
-  update available  Git.Git                  2.47.0 -> 2.48.1
-  up to date        Microsoft.PowerToys      0.86.0
-  fixed version     jqlang.jq                1.7.1 installed, borc.yaml fixes it at 1.7.1; 1.8.0 available
-  not installed     Canonical.Ubuntu.2404    borc apply installs it
-  unknown           XPDNLRV08ZCH53           12.18.0.12328 installed; the Store gives no version, so winget cannot tell
+With `--check`, a recipe with upgrade units gets a row too:
 
-  1 update available, 1 up to date, 1 fixed, 1 not installed, 1 unknown.
+```text
+==> [4/4] What borc upgrade would upgrade
+  State             App                    Installed      Available
+  update available  Git.Git                2.47.0         2.48.1
+  up to date        Microsoft.PowerToys    0.86.0
+  fixed version     jqlang.jq              1.7.1          1.8.0      fixed at 1.7.1 in borc.yaml
+  not installed     Canonical.Ubuntu.2404                            borc apply installs it
+  unknown           XPDNLRV08ZCH53         12.18.0.12328             the Store gives no version, so winget cannot tell
+  update available  @local/codealta                                  would run: codealta update
+  update available  CodeAlta               4.2.0          4.4.0      version reported by an upgrade unit
+
+  2 updates available, 1 up to date, 1 fixed, 1 not installed, 1 unknown.
+
+Result: borc upgrade would upgrade 1 package and 1 recipe.
+  updates:       Git.Git          2.47.0  -> 2.48.1
+                 @local/codealta                     would run: codealta update
+  fixed version: jqlang.jq  1.7.1  fixed at 1.7.1 in borc.yaml  1.8.0 available
+  not installed: Canonical.Ubuntu.2404
+                 (borc apply installs them)
+  unknown:       XPDNLRV08ZCH53  12.18.0.12328  the Store gives no version, so winget cannot tell
+  new versions:  CodeAlta  4.2.0  -> 4.4.0
+  counts:        2 updates available, 1 up to date, 1 fixed, 1 not installed, 1 unknown
 ```
+
+- **The table** lists everything, with the installed and available versions in
+  columns of their own. **`Result:`** only lists what needs attention: what is up
+  to date is not repeated there.
 
 - **Packages winget only upgrades when named by ID** are counted too:
   `borc upgrade` names each package.
@@ -365,8 +385,9 @@ packages `borc upgrade` would cover: the same list, or only `<app>`.
   can tell, and `--what-if` runs no recipe code. Add `--check` to run those tests
   in one `winget configure test`: the recipe is then `update available` (a unit
   would run), `up to date`, or `unknown` when a test fails. Elevated units ask for
-  one UAC prompt. Versions the tests report with `Write-BorcVersion` are listed
-  under the table and under `versions`.
+  one UAC prompt. A version a test reports with `Write-BorcVersion` gets a row of
+  its own, named after the app, since a report does not say which recipe sent
+  it; a newer version is also listed under `new versions`.
 - **Other recipe units** are never checked, nor run by `borc upgrade`.
 
 ## borc install

@@ -74,7 +74,9 @@ function Invoke-BorcUpgradeUnits {
   Write-BorcElevationNotice -Units $Upgrade.Document['resources']
   Clear-BorcVersionReports -Paths $Paths
   $code = Invoke-BorcConfigureRun -Document $Upgrade.Document -Name 'upgrade' -Command 'upgrade'
-  [pscustomobject]@{ Code = $code; Versions = @(Get-BorcReportedVersions -Reports (Read-BorcVersionReports -Paths $Paths)) }
+  $versions = @(Get-BorcReportedVersions -Reports (Read-BorcVersionReports -Paths $Paths))
+  foreach ($version in $versions) { Write-BorcLog -Message "An upgrade unit reported $($version.Text): $($version.State)." }
+  [pscustomobject]@{ Code = $code; Versions = $versions }
 }
 
 # What borc upgrade covers: with no <app>, every listed package and recipe. With
@@ -121,28 +123,28 @@ function Format-BorcFixedDetail {
   "$text (not installed)"
 }
 
-# Versions are the reports of the upgrade units: what they say moved joins the
-# packages that did, and without any, the units are only said to have run.
+# What the run did, with only what needs attention: packages and apps that moved,
+# failures, what was left alone. Versions the upgrade units reported unchanged
+# are in the log, not here; without any report, the units are only said to run.
 function Set-BorcUpgradeResult {
-  param([string[]] $Upgraded = @(), [string[]] $Failed = @(), [string[]] $NotInstalled = @(), [string[]] $Fixed = @(), [string[]] $Ran = @(), [object[]] $Versions = @())
-  $Upgraded = @($Upgraded) + @($Versions | Where-Object State -EQ 'upgraded' | ForEach-Object Text)
+  param([object[]] $Upgraded = @(), [string[]] $Failed = @(), [string[]] $NotInstalled = @(), [string[]] $Fixed = @(), [string[]] $Ran = @(), [object[]] $Versions = @())
+  $moved = [System.Collections.Generic.List[object]]::new()
+  foreach ($change in $Upgraded) { $moved.Add(@($change.Id, $change.Before, "-> $($change.After)")) }
+  foreach ($version in @($Versions | Where-Object State -EQ 'upgraded')) { $moved.Add(@($version.App, $version.Before, "-> $($version.After)")) }
   $details = [ordered]@{}
-  if ($Upgraded.Count -gt 0) { $details['upgraded'] = $Upgraded -join ', ' }
-  $upToDate = @($Versions | Where-Object State -EQ 'up to date' | ForEach-Object Text)
-  if ($upToDate.Count -gt 0) { $details['up to date'] = $upToDate -join ', ' }
-  $behind = @($Versions | Where-Object State -EQ 'available' | ForEach-Object Text)
-  if ($behind.Count -gt 0) { $details['not moved'] = "$($behind -join ', '); the upgrade unit did not install the newer version" }
-  $reported = @($Versions | Where-Object State -EQ 'reported' | ForEach-Object Text)
-  if ($reported.Count -gt 0) { $details['reported'] = $reported -join ', ' }
+  if ($moved.Count -gt 0) { $details['upgraded'] = @(Format-BorcColumns -Rows $moved.ToArray()) }
+  $behind = [System.Collections.Generic.List[object]]::new()
+  foreach ($version in @($Versions | Where-Object State -EQ 'available')) { $behind.Add(@($version.App, $version.After, "$($version.Available) available")) }
+  if ($behind.Count -gt 0) { $details['not moved'] = @(Format-BorcColumns -Rows $behind.ToArray()) + '(the upgrade unit did not install the newer version)' }
   if ($Ran.Count -gt 0) {
     $note = if ($Versions.Count -gt 0) { '' } else { '; winget does not say what they changed' }
     $details['ran'] = "upgrade units of $($Ran -join ', ')$note"
   }
-  if ($Failed.Count -gt 0) { $details['failed'] = $Failed -join ', ' }
-  if ($NotInstalled.Count -gt 0) { $details['not installed'] = "$($NotInstalled -join ', '); borc apply installs them" }
-  if ($Fixed.Count -gt 0) { $details['fixed version'] = $Fixed -join ', ' }
+  if ($Failed.Count -gt 0) { $details['failed'] = $Failed }
+  if ($NotInstalled.Count -gt 0) { $details['not installed'] = @($NotInstalled) + '(borc apply installs them)' }
+  if ($Fixed.Count -gt 0) { $details['fixed version'] = $Fixed }
   if ($Failed.Count -gt 0) { Set-BorcResult -Headline "some upgrades failed; winget's errors are shown above." -Details $details -Color Red }
-  elseif ($Upgraded.Count -gt 0) { Set-BorcResult -Headline 'done, with changes.' -Details $details -Color Green }
+  elseif ($moved.Count -gt 0) { Set-BorcResult -Headline 'done, with changes.' -Details $details -Color Green }
   elseif ($Ran.Count -gt 0) { Set-BorcResult -Headline 'done; no package moved, and the upgrade units ran.' -Details $details -Color Green }
   else { Set-BorcResult -Headline 'done; nothing to upgrade.' -Details $details -Color Green }
 }

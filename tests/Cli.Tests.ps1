@@ -734,7 +734,7 @@ Describe 'Commands with winget mocked' {
         Invoke-Borc -Arguments @('upgrade') | Should -Be 0
         $script:Upgraded | Should -Be @('Git.Git', '9NBLGGH4NNS1', 'OpenJS.NodeJS.LTS', 'JetBrains.IntelliJIDEA.Community', 'Canonical.Ubuntu.2404')
         Should -Invoke Invoke-BorcWinget -ParameterFilter { $Arguments[0] -ne 'upgrade' } -Times 0 -Exactly
-        ($script:Shown -join "`n") | Should -Match 'Result: done; nothing to upgrade\.\n  not installed: Canonical\.Ubuntu\.2404; borc apply installs them'
+        ($script:Shown -join "`n") | Should -Match 'Result: done; nothing to upgrade\.\n  not installed: Canonical\.Ubuntu\.2404\n                 \(borc apply installs them\)'
       }
     }
 
@@ -841,7 +841,9 @@ Describe 'Commands with winget mocked' {
         Mock Invoke-BorcWinget { throw 'must not upgrade with --what-if' }
         Invoke-Borc -Arguments @('upgrade', '--what-if', 'recipes/node') | Should -Be 0
         $text = $script:Shown -join "`n"
-        $text | Should -Match 'update available\s+OpenJS\.NodeJS\.LTS\s+22\.1\.0 -> 22\.2\.0'
+        $text | Should -Match 'State\s+App\s+Installed\s+Available'
+        $text | Should -Match 'update available\s+OpenJS\.NodeJS\.LTS\s+22\.1\.0\s+22\.2\.0'
+        $text | Should -Match '  updates:\s+OpenJS\.NodeJS\.LTS\s+22\.1\.0\s+-> 22\.2\.0'
         $text | Should -Not -Match 'Git\.Git'
         $text | Should -Match 'Result: borc upgrade would upgrade 1 package\.'
         $script:Shown.Clear()
@@ -959,7 +961,7 @@ Describe 'Commands with winget mocked' {
           }
           Invoke-Borc -Arguments @('upgrade', '@local/tool') | Should -Be 0
           $text = $script:Shown -join "`n"
-          $text | Should -Match 'Result: done, with changes\.\n  upgraded:\s+tool \(1\.0 -> 2\.0\)\n  ran:\s+upgrade units of @local/tool\n'
+          $text | Should -Match 'Result: done, with changes\.\n  upgraded:\s+tool\s+1\.0\s+-> 2\.0\n  ran:\s+upgrade units of @local/tool\n'
           $text | Should -Not -Match 'stale'
         }
       }
@@ -976,13 +978,17 @@ Describe 'Commands with winget mocked' {
           Mock Invoke-BorcWingetQuiet {
             New-Item -ItemType Directory -Path $folder -Force | Out-Null
             Set-Content -LiteralPath (Join-Path $folder 'a.json') -Value '{"App":"tool","Installed":"1.0","Available":"2.0","Ticks":10}'
+            Set-Content -LiteralPath (Join-Path $folder 'b.json') -Value '{"App":"other","Installed":"3.0","Available":"3.0","Ticks":11}'
             [pscustomobject]@{ ExitCode = 1; Output = $test }
           } -ParameterFilter { $Arguments[0] -eq 'configure' -and $Arguments[1] -eq 'test' }
           Mock Invoke-BorcWinget { throw 'must not change anything' }
           Invoke-Borc -Arguments @('upgrade', '--what-if', '--check', '@local/tool') | Should -Be 0
           $text = $script:Shown -join "`n"
-          $text | Should -Match 'Versions the upgrade units reported:\n    tool \(1\.0 -> 2\.0\) available'
-          $text | Should -Match '  versions:\s+tool \(1\.0 -> 2\.0\) available'
+          $text | Should -Match 'update available\s+tool\s+1\.0\s+2\.0\s+version reported by an upgrade unit'
+          $text | Should -Match 'up to date\s+other\s+3\.0\s+version reported by an upgrade unit'
+          $result = $text.Substring($text.IndexOf('Result:'))
+          $result | Should -Match '  new versions:\s+tool\s+1\.0\s+-> 2\.0'
+          $result | Should -Not -Match 'other'
         }
       }
 
@@ -1029,7 +1035,7 @@ Describe 'Commands with winget mocked' {
         Invoke-Borc -Arguments @('upgrade') | Should -Be 1
         $text = $script:Shown -join "`n"
         $text | Should -Match "Result: some upgrades failed; winget's errors are shown above\."
-        $text | Should -Match '  upgraded:\s+Git\.Git \(1\.0 -> 2\.0\)'
+        $text | Should -Match '  upgraded:\s+Git\.Git\s+1\.0\s+-> 2\.0'
         $text | Should -Match '  failed:\s+9NBLGGH4NNS1'
       }
     }
