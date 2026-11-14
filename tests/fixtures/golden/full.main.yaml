@@ -24,7 +24,7 @@ resources:
 - name: 'recipes/node: npm cache'
   type: Microsoft.DSC.Transitional/PowerShellScript
   properties:
-    input: D:\caches\npm
+    input: '%LOCALAPPDATA%\npm-cache'
     testScript: |
       param($path)
       (npm config get cache) -eq $path

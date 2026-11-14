@@ -9,7 +9,7 @@ Describe 'borc.yaml parsing' {
     $config.Errors | Should -BeNullOrEmpty
     $config.Recipes.Name | Should -Be @('recipes')
     $config.Apps.Kind | Should -Be @('winget', 'msstore', 'recipe', 'recipe', 'recipe', 'recipe', 'recipe')
-    ($config.Apps | Where-Object Id -EQ 'recipes/node').Parameters['npmCache'] | Should -Be 'D:\caches\npm'
+    ($config.Apps | Where-Object Id -EQ 'recipes/node').Parameters['npmCache'] | Should -Be '%LOCALAPPDATA%\npm-cache'
     $config.Secrets['NPM_TOKEN'] | Should -Be 'token for the company npm registry'
   }
 
@@ -104,9 +104,10 @@ Describe 'Recipe parsing' {
   }
 
   It 'resolves repo recipes and @local recipes to files' {
-    InModuleScope borc {
-      Resolve-BorcRecipePath -Id 'recipes/node' -RecipesRoot 'C:\r' -SettingsRoot 'D:\settings' | Should -Be 'C:\r\recipes\node.yaml'
-      Resolve-BorcRecipePath -Id '@local/wsl-ubuntu' -RecipesRoot 'C:\r' -SettingsRoot 'D:\settings' | Should -Be 'D:\settings\borc\cookbook\wsl-ubuntu.yaml'
+    InModuleScope borc -Parameters @{ D = $script:SystemDrive } {
+      param($D)
+      Resolve-BorcRecipePath -Id 'recipes/node' -RecipesRoot "$D\r" -SettingsRoot "$D\settings" | Should -Be "$D\r\recipes\node.yaml"
+      Resolve-BorcRecipePath -Id '@local/wsl-ubuntu' -RecipesRoot "$D\r" -SettingsRoot "$D\settings" | Should -Be "$D\settings\borc\cookbook\wsl-ubuntu.yaml"
     }
   }
 }
@@ -141,7 +142,7 @@ Describe 'Plan validation' {
 
   It 'reports <Case>' -ForEach @(
     @{ Case = 'an unknown parameter'; Expected = "recipe recipes/node has no parameter 'npmCach' (it declares: npmCache, npmPrefix)"
-      Config = "recipes:`n  - repo: https://x/recipes`napps:`n  - recipe: recipes/node`n    parameters:`n      npmCach: D:\x" }
+      Config = "recipes:`n  - repo: https://x/recipes`napps:`n  - recipe: recipes/node`n    parameters:`n      npmCach: x" }
     @{ Case = 'an undeclared secret'; Expected = 'uses the secret NPM_TOKEN, which is not declared under secrets'
       Config = "recipes:`n  - repo: https://x/recipes`napps:`n  - recipe: recipes/node`n  - recipe: recipes/npm-auth" }
     @{ Case = 'a required recipe that is not listed'; Expected = 'requires recipes/node, which borc.yaml does not list'
@@ -161,7 +162,7 @@ Describe 'Plan validation' {
   }
 
   It 'reports a missing borc.yaml' {
-    $plan = InModuleScope borc { Get-BorcPlan -SettingsRoot 'C:\nowhere' -RecipesRoot 'C:\nowhere' }
+    $plan = InModuleScope borc -Parameters @{ N = (Join-Path $TestDrive 'nowhere') } { param($N) Get-BorcPlan -SettingsRoot $N -RecipesRoot $N }
     $plan.Errors | Should -Match 'borc.yaml not found'
   }
 }
