@@ -1,0 +1,37 @@
+# Manual check V2: an app started by a setScript keeps running after winget
+# configure ends, with a visible window. The unit starts a GUI window titled
+# "borc-check V2", as a desktop app would, next to a PowerShell console, and writes
+# the process ID to %LOCALAPPDATA%\borc-check\v2.txt.
+# testScript always returns $false, so setScript runs on every apply.
+$schema: https://raw.githubusercontent.com/PowerShell/DSC/main/schemas/2023/08/config/document.json
+metadata:
+  winget:
+    processor: dscv3
+resources:
+  - name: start app
+    type: Microsoft.DSC.Transitional/PowerShellScript
+    properties:
+      input: v2.txt
+      testScript: |
+        param($file)
+        $false
+      setScript: |
+        param($file)
+        $folder = Join-Path $env:LOCALAPPDATA 'borc-check'
+        New-Item -ItemType Directory -Path $folder -Force | Out-Null
+        $app = @'
+        Add-Type -AssemblyName System.Windows.Forms
+        $form = [System.Windows.Forms.Form]::new()
+        $form.Text = 'borc-check V2'
+        $form.Width = 480
+        $form.Height = 120
+        $label = [System.Windows.Forms.Label]::new()
+        $label.Text = 'Started by a winget configure unit for BORC check V2.'
+        $label.Dock = 'Fill'
+        $form.Controls.Add($label)
+        [System.Windows.Forms.Application]::Run($form)
+        '@
+        $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($app))
+        # No -WindowStyle Hidden: Windows applies it to the form, the first window shown.
+        $process = Start-Process pwsh -ArgumentList '-NoProfile', '-EncodedCommand', $encoded -PassThru
+        Set-Content -LiteralPath (Join-Path $folder $file) -Value $process.Id

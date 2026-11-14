@@ -68,6 +68,68 @@ say, because winget units ignore the caller's environment.
 
 Clean up with `Remove-Item $check -Recurse -Force` after closing the window.
 
+## Before upgrade units and versions
+
+These checks answer what the plan for `borc upgrade <app>`, `--what-if` and upgrade
+units needs from a real winget. The files are in `upgrade/`. Run them from the repo
+root in a new PowerShell 7 window without the variables of the section above. V2 to
+V4 run real `winget configure` files, but their units only write to
+`%LOCALAPPDATA%\borc-check` and open one window. Write each result in
+`docs/design.md` when the feature that needs it is built.
+
+1. **V1: what winget says about upgrades.** Read-only. It saves the output of
+   `winget list --upgrade-available` with its variants, and of `winget upgrade`.
+
+   ```powershell
+   ./tests/manual/upgrade/Save-UpgradeListing.ps1 -Path "$env:TEMP\borc-check-v1"
+   ```
+
+   In the files, note:
+   - a Store app with an update: is it listed, and under which ID?
+   - the packages `winget upgrade` lists as needing "explicit targeting": are they in
+     `list --upgrade-available`?
+   - a package whose version is `Unknown`: is it listed without `--include-unknown`?
+   - a long name or ID cut short with `…`, and the columns of each table.
+
+   The files list every app of the machine: copy only the lines a test fixture needs.
+
+2. **V2: an app started by a unit keeps running, with a visible window.** The unit
+   opens a window titled `borc-check V2`, next to a PowerShell console. After
+   winget has ended, `Get-V2Window.ps1` must show `Running`, `HasWindow` and
+   `Visible` true, with that title. It then closes the window; `-Keep` leaves it open.
+
+   ```powershell
+   winget configure --file tests/manual/upgrade/v2-start-app.winget.yaml --accept-configuration-agreements --disable-interactivity
+   ./tests/manual/upgrade/Get-V2Window.ps1
+   ```
+
+3. **V3: a setScript reports a version, elevated or not.** One UAC prompt. Then two
+   files exist, both with your user name in `User` and your `LocalAppData`, one with
+   `Elevated` true. The `Remove-Item`, not elevated, must succeed.
+
+   ```powershell
+   New-Item -ItemType Directory "$env:LOCALAPPDATA\borc-check" -Force | Out-Null
+   Copy-Item tests/manual/upgrade/Write-CheckVersion.ps1 "$env:LOCALAPPDATA\borc-check"
+   winget configure --file tests/manual/upgrade/v3-set-report.winget.yaml --accept-configuration-agreements --disable-interactivity
+   Get-ChildItem "$env:LOCALAPPDATA\borc-check\versions" | Get-Content
+   Remove-Item "$env:LOCALAPPDATA\borc-check\versions\*"
+   ```
+
+   If UAC asks for another account than yours, note what `User` and `LocalAppData`
+   say: that is the case where BORC falls back to "ran".
+
+4. **V4: `winget configure test` runs a reporting testScript.** One UAC prompt. Both
+   units are "not in the described configuration state", not failed, and two files
+   exist with `Available` 4.4.0.
+
+   ```powershell
+   winget configure test --file tests/manual/upgrade/v4-test-report.winget.yaml --accept-configuration-agreements --disable-interactivity
+   Get-ChildItem "$env:LOCALAPPDATA\borc-check\versions" | Get-Content
+   ```
+
+Clean up with `Remove-Item "$env:LOCALAPPDATA\borc-check" -Recurse -Force`, and close
+the PowerShell console V2 opened.
+
 ## On a fresh Windows 11 machine
 
 These checks install software and change the machine, so use a virtual machine or a

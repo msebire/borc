@@ -1,0 +1,33 @@
+# Manual check V3: a setScript reports a version through the helper, from a
+# normal and from an elevated unit. Each writes one file to
+# %LOCALAPPDATA%\borc-check\versions; the check then deletes them without
+# elevation. testScript returns $false, so setScript runs on every apply.
+$schema: https://raw.githubusercontent.com/PowerShell/DSC/main/schemas/2023/08/config/document.json
+metadata:
+  winget:
+    processor: dscv3
+resources:
+  - name: report normal
+    type: Microsoft.DSC.Transitional/PowerShellScript
+    properties:
+      input: set normal
+      testScript: |
+        param($note)
+        $false
+      setScript: |
+        param($note)
+        . (Join-Path $env:LOCALAPPDATA 'borc-check\Write-CheckVersion.ps1')
+        Write-CheckVersion -App v3 -Installed '4.4.0' -Note $note
+  - name: report elevated
+    type: Microsoft.DSC.Transitional/PowerShellScript
+    metadata:
+      securityContext: elevated
+    properties:
+      input: set elevated
+      testScript: |
+        param($note)
+        $false
+      setScript: |
+        param($note)
+        . (Join-Path $env:LOCALAPPDATA 'borc-check\Write-CheckVersion.ps1')
+        Write-CheckVersion -App v3 -Installed '4.4.0' -Note $note

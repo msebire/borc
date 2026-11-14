@@ -1,0 +1,35 @@
+# Manual check V4: winget configure test runs a testScript that dot-sources the
+# helper and reports, and the unit still outputs exactly one boolean. Expect
+# "not in the described configuration state" for both units, not a failure, and
+# one report file each in %LOCALAPPDATA%\borc-check\versions.
+$schema: https://raw.githubusercontent.com/PowerShell/DSC/main/schemas/2023/08/config/document.json
+metadata:
+  winget:
+    processor: dscv3
+resources:
+  - name: test normal
+    type: Microsoft.DSC.Transitional/PowerShellScript
+    properties:
+      input: test normal
+      testScript: |
+        param($note)
+        . (Join-Path $env:LOCALAPPDATA 'borc-check\Write-CheckVersion.ps1')
+        Write-CheckVersion -App v4 -Installed '4.2.0' -Available '4.4.0' -Note $note
+        $false
+      setScript: |
+        param($note)
+        throw 'V4 only runs winget configure test.'
+  - name: test elevated
+    type: Microsoft.DSC.Transitional/PowerShellScript
+    metadata:
+      securityContext: elevated
+    properties:
+      input: test elevated
+      testScript: |
+        param($note)
+        . (Join-Path $env:LOCALAPPDATA 'borc-check\Write-CheckVersion.ps1')
+        Write-CheckVersion -App v4 -Installed '4.2.0' -Available '4.4.0' -Note $note
+        $false
+      setScript: |
+        param($note)
+        throw 'V4 only runs winget configure test.'
